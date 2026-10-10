@@ -10,6 +10,7 @@ license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
     "datasets>=5.1.0",
+    "docker>=7.2.0",
     "langgraph>=1.0.0",
     "pydantic>=2.12",
     "python-dotenv>=1.0.1",
