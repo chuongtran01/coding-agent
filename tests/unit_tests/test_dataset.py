@@ -1,8 +1,9 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
-from agent.harness.dataset import Task, _parse_tests, row_to_task
+from agent.harness.dataset import Task
 
 ROW = {
     "repo": "psf/requests",
@@ -20,8 +21,8 @@ ROW = {
 }
 
 
-def test_row_to_task_maps_fields() -> None:
-    task = row_to_task(ROW)
+def test_model_validate_maps_fields() -> None:
+    task = Task.model_validate(ROW)
     assert task == Task(
         instance_id="psf__requests-0000",
         repo="psf/requests",
@@ -35,17 +36,30 @@ def test_row_to_task_maps_fields() -> None:
 
 
 def test_task_is_hashable_and_frozen() -> None:
-    task = row_to_task(ROW)
+    task = Task.model_validate(ROW)
     hash(task)
-    with pytest.raises(AttributeError):
+    with pytest.raises(ValidationError):
         task.repo = "other"  # type: ignore[misc]
 
 
-def test_parse_tests_accepts_list_and_empty() -> None:
-    assert _parse_tests(["a", "b"]) == ("a", "b")
-    assert _parse_tests("[]") == ()
+def test_test_lists_accept_list_and_empty() -> None:
+    task = Task.model_validate(
+        {**ROW, "FAIL_TO_PASS": ["a", "b"], "PASS_TO_PASS": "[]"}
+    )
+    assert task.FAIL_TO_PASS == ("a", "b")
+    assert task.PASS_TO_PASS == ()
 
 
-def test_parse_tests_rejects_non_list() -> None:
-    with pytest.raises(ValueError):
-        _parse_tests('{"a": 1}')
+def test_test_lists_reject_non_list() -> None:
+    with pytest.raises(ValidationError):
+        Task.model_validate({**ROW, "FAIL_TO_PASS": '{"a": 1}'})
+
+
+def test_base_commit_must_be_full_sha() -> None:
+    with pytest.raises(ValidationError):
+        Task.model_validate({**ROW, "base_commit": "abc123"})
+
+
+def test_json_round_trip() -> None:
+    task = Task.model_validate(ROW)
+    assert Task.model_validate_json(task.model_dump_json()) == task

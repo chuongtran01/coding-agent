@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DATASET_NAME = "princeton-nlp/SWE-bench_Lite"
 DEFAULT_SPLIT = "test"
@@ -21,43 +21,29 @@ DEV_TASK_IDS: tuple[str, ...] = (
 )
 
 
-@dataclass(frozen=True)
-class Task:
+class Task(BaseModel):
     """One SWE-bench Lite instance.
 
     `gold_patch` and `test_patch` are evaluation-only and must never reach the agent.
+    Build one from a dataset row with `Task.model_validate(row)`.
     """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     instance_id: str
     repo: str
-    base_commit: str
+    base_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
     problem_statement: str
     FAIL_TO_PASS: tuple[str, ...]
     PASS_TO_PASS: tuple[str, ...]
-    gold_patch: str
+    gold_patch: str = Field(validation_alias="patch")
     test_patch: str
 
-
-def _parse_tests(value: str | list[str]) -> tuple[str, ...]:
-    """Parse a test list stored as a JSON string (or already a list)."""
-    tests = json.loads(value) if isinstance(value, str) else value
-    if not isinstance(tests, list) or not all(isinstance(t, str) for t in tests):
-        raise ValueError(f"expected a list of test ids, got {tests!r}")
-    return tuple(tests)
-
-
-def row_to_task(row: Mapping[str, Any]) -> Task:
-    """Convert one dataset row into a `Task`."""
-    return Task(
-        instance_id=row["instance_id"],
-        repo=row["repo"],
-        base_commit=row["base_commit"],
-        problem_statement=row["problem_statement"],
-        FAIL_TO_PASS=_parse_tests(row["FAIL_TO_PASS"]),
-        PASS_TO_PASS=_parse_tests(row["PASS_TO_PASS"]),
-        gold_patch=row["patch"],
-        test_patch=row["test_patch"],
-    )
+    @field_validator("FAIL_TO_PASS", "PASS_TO_PASS", mode="before")
+    @classmethod
+    def _parse_json_list(cls, value: Any) -> Any:
+        """Parse a test list the dataset stores as a JSON string."""
+        return json.loads(value) if isinstance(value, str) else value
 
 
 def load_tasks(split: str = DEFAULT_SPLIT) -> dict[str, Task]:
@@ -65,7 +51,7 @@ def load_tasks(split: str = DEFAULT_SPLIT) -> dict[str, Task]:
     from datasets import load_dataset  # type: ignore[import-untyped]
 
     ds = load_dataset(DATASET_NAME, split=split)
-    return {row["instance_id"]: row_to_task(row) for row in ds}
+    return {row["instance_id"]: Task.model_validate(row) for row in ds}
 
 
 def load_task(instance_id: str, split: str = DEFAULT_SPLIT) -> Task:
