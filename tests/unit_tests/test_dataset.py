@@ -39,7 +39,7 @@ def test_task_is_hashable_and_frozen() -> None:
     task = Task.model_validate(ROW)
     hash(task)
     with pytest.raises(ValidationError):
-        task.repo = "other"  # type: ignore[misc]
+        task.repo = "other"
 
 
 def test_test_lists_accept_list_and_empty() -> None:

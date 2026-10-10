@@ -47,7 +47,7 @@ async def call_model(state: State, runtime: Runtime[Context]) -> Dict[str, Any]:
 
 # Define the graph
 graph = (
-    StateGraph(State, context_schema=Context)
+    StateGraph(State, context_schema=Context, input_schema=State, output_schema=State)
     .add_node(call_model)
     .add_edge("__start__", "call_model")
     .compile(name="New Graph")

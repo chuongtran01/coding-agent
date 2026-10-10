@@ -1,21 +1,26 @@
 """Needs Docker and pulls each dev task's image (about 3 GB each) on first run."""
 
-import docker
+from typing import Any
+
+import docker  # type: ignore[import-untyped]
 import pytest
 
-from agent.harness.dataset import load_dev_tasks
+from agent.harness.dataset import Task, load_dev_tasks
 from agent.harness.sandbox import CONTAINER_LABEL, Sandbox
 
 DEV_TASKS = load_dev_tasks()
 
 
-def _sandbox_containers() -> list[object]:
+def _sandbox_containers() -> list[Any]:
     client = docker.from_env()
-    return client.containers.list(all=True, filters={"label": CONTAINER_LABEL})
+    containers: list[Any] = client.containers.list(
+        all=True, filters={"label": CONTAINER_LABEL}
+    )
+    return containers
 
 
 @pytest.mark.parametrize("task", DEV_TASKS, ids=lambda t: t.instance_id)
-def test_start_at_base_commit_and_clean_up(task) -> None:
+def test_start_at_base_commit_and_clean_up(task: Task) -> None:
     with Sandbox.start(task) as sb:
         result = sb.exec("git rev-parse HEAD~1 HEAD")
         assert result.exit_code == 0
