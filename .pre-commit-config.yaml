@@ -1,0 +1,10 @@
+# Install once per clone: uv run pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: lint
+        name: make lint (ruff + mypy --strict)
+        entry: uv run make lint
+        language: system
+        types: [python]
+        pass_filenames: false
