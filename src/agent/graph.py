@@ -43,6 +43,11 @@ NUDGE = (
 )
 MAX_NUDGES = 1  # per stall: a turn with tool calls resets the count
 
+# LangGraph's END, typed as a Literal so the routers' return types can include it
+# (END itself is a plain str). LangGraph reads those return types to build the
+# conditional edges.
+_END: Literal["__end__"] = "__end__"
+
 
 class ToolCall(BaseModel):
     """One tool call as the agent made it and as the model saw the result."""
@@ -189,9 +194,9 @@ def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> 
     def give_up(state: State) -> StateUpdate:
         return {"stop_reason": "no_tool_calls"}
 
-    def after_model(state: State) -> str:
+    def after_model(state: State) -> Literal["tools", "nudge", "give_up", "__end__"]:
         if state["stop_reason"]:
-            return END
+            return _END
         reply = state["messages"][-1]
         assert isinstance(reply, AIMessage)
         if reply.tool_calls or reply.invalid_tool_calls:
@@ -200,8 +205,8 @@ def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> 
             return "nudge"
         return "give_up"
 
-    def after_tools(state: State) -> str:
-        return END if state["stop_reason"] else "model"
+    def after_tools(state: State) -> Literal["model", "__end__"]:
+        return _END if state["stop_reason"] else "model"
 
     graph = StateGraph(State)
     graph.add_node("model", call_model)
@@ -209,10 +214,8 @@ def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> 
     graph.add_node("nudge", nudge)
     graph.add_node("give_up", give_up)
     graph.add_edge(START, "model")
-    graph.add_conditional_edges(
-        "model", after_model, ["tools", "nudge", "give_up", END]
-    )
-    graph.add_conditional_edges("tools", after_tools, ["model", END])
+    graph.add_conditional_edges("model", after_model)
+    graph.add_conditional_edges("tools", after_tools)
     graph.add_edge("nudge", "model")
     graph.add_edge("give_up", END)
     return graph.compile(name="agent")

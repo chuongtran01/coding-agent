@@ -14,9 +14,10 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langgraph.graph import END
 
 from agent.config import AgentConfig
-from agent.graph import NUDGE, AgentResult, run_agent
+from agent.graph import _END, NUDGE, AgentResult, build_graph, run_agent
 from agent.harness.dataset import AgentTask
 from agent.tools import Toolbox
 
@@ -263,3 +264,20 @@ def test_messages_are_only_appended(toolbox: Toolbox) -> None:
     for before, after in zip(model.seen, model.seen[1:]):
         assert after[: len(before)] == before
     assert result.messages[: len(model.seen[-1])] == model.seen[-1]
+
+
+def test_end_alias_matches_langgraph() -> None:
+    assert _END == END
+
+
+def test_edges_come_from_the_router_return_types(toolbox: Toolbox) -> None:
+    graph = build_graph(ScriptedModel(replies=[]), toolbox, CONFIG).get_graph()
+    edges = {(e.source, e.target) for e in graph.edges}
+    assert {
+        ("model", "tools"),
+        ("model", "nudge"),
+        ("model", "give_up"),
+        ("model", "__end__"),
+        ("tools", "model"),
+        ("tools", "__end__"),
+    } <= edges
