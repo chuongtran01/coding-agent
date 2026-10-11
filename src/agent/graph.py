@@ -86,11 +86,29 @@ class State(TypedDict):
     error: str | None
 
 
+class StateUpdate(TypedDict, total=False):
+    """What a node returns: the State keys it changes, all optional.
+
+    Mirrors State minus `started`, which no node changes. Keep the two in step;
+    a key or type that is not here is a mypy error in the node that returns it.
+    """
+
+    messages: list[BaseMessage]
+    tool_calls: list[ToolCall]
+    turns: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    nudges_since_tool_call: int
+    stop_reason: StopReason
+    error: str
+
+
 def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> Any:
     """Compile the loop for one run, with `model` already built from `config`."""
     bound = model.bind_tools(toolbox.tools())
 
-    def call_model(state: State) -> dict[str, Any]:
+    def call_model(state: State) -> StateUpdate:
         reason = _limit_hit(state, config)
         if reason:
             return {"stop_reason": reason}
@@ -111,10 +129,10 @@ def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> 
             "cost_usd": state["cost_usd"] + cost_usd(config.model, usage),
         }
 
-    def run_tools(state: State) -> dict[str, Any]:
+    def run_tools(state: State) -> StateUpdate:
         reply = state["messages"][-1]
         assert isinstance(reply, AIMessage)
-        messages: list[ToolMessage] = []
+        messages: list[BaseMessage] = []
         records: list[ToolCall] = []
         submitted = False
         # Run calls in order, all in this step: every call needs a result, and
@@ -153,7 +171,7 @@ def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> 
                     runtime_s=0.0,
                 )
             )
-        update: dict[str, Any] = {
+        update: StateUpdate = {
             "messages": messages,
             "tool_calls": records,
             "nudges_since_tool_call": 0,
@@ -162,13 +180,13 @@ def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> 
             update["stop_reason"] = "submitted"
         return update
 
-    def nudge(state: State) -> dict[str, Any]:
+    def nudge(state: State) -> StateUpdate:
         return {
             "messages": [HumanMessage(NUDGE)],
             "nudges_since_tool_call": state["nudges_since_tool_call"] + 1,
         }
 
-    def give_up(state: State) -> dict[str, Any]:
+    def give_up(state: State) -> StateUpdate:
         return {"stop_reason": "no_tool_calls"}
 
     def after_model(state: State) -> str:
