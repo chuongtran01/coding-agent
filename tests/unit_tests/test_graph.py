@@ -281,3 +281,13 @@ def test_edges_come_from_the_router_return_types(toolbox: Toolbox) -> None:
         ("tools", "model"),
         ("tools", "__end__"),
     } <= edges
+
+
+def test_result_round_trips_through_json(toolbox: Toolbox) -> None:
+    result, _ = run(
+        toolbox, [ai(call("bash", "c1", command="echo hi")), ai(call("submit", "c2"))]
+    )
+    loaded = AgentResult.model_validate_json(result.model_dump_json())
+    assert [type(m) for m in loaded.messages] == [type(m) for m in result.messages]
+    assert loaded.messages == result.messages
+    assert loaded.tool_calls == result.tool_calls

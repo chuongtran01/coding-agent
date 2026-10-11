@@ -8,7 +8,7 @@ strategies at `first_message`, so the rest of the loop stays the same.
 
 from __future__ import annotations
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 
 from agent.harness.dataset import AgentTask
 from agent.harness.sandbox import WORKDIR
@@ -51,6 +51,6 @@ def first_message(task: AgentTask) -> str:
     )
 
 
-def initial_messages(task: AgentTask) -> list[BaseMessage]:
+def initial_messages(task: AgentTask) -> list[AnyMessage]:
     """Return the messages that start a run: the system prompt and the issue."""
     return [SystemMessage(SYSTEM_PROMPT), HumanMessage(first_message(task))]

@@ -13,17 +13,17 @@ from __future__ import annotations
 
 import operator
 import time
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
-    BaseMessage,
     HumanMessage,
     ToolMessage,
 )
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
@@ -79,7 +79,7 @@ class AgentResult(BaseModel):
 class State(TypedDict):
     """Graph state. Lists are appended to; the counters hold running totals."""
 
-    messages: Annotated[list[BaseMessage], operator.add]
+    messages: Annotated[list[AnyMessage], operator.add]
     tool_calls: Annotated[list[ToolCall], operator.add]
     turns: int
     input_tokens: int
@@ -98,7 +98,7 @@ class StateUpdate(TypedDict, total=False):
     a key or type that is not here is a mypy error in the node that returns it.
     """
 
-    messages: list[BaseMessage]
+    messages: list[AnyMessage]
     tool_calls: list[ToolCall]
     turns: int
     input_tokens: int
@@ -109,7 +109,9 @@ class StateUpdate(TypedDict, total=False):
     error: str
 
 
-def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> Any:
+def build_graph(
+    model: BaseChatModel, toolbox: Toolbox, config: AgentConfig
+) -> CompiledStateGraph[State, None, State, State]:
     """Compile the loop for one run, with `model` already built from `config`."""
     bound = model.bind_tools(toolbox.tools())
 
@@ -137,7 +139,7 @@ def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> 
     def run_tools(state: State) -> StateUpdate:
         reply = state["messages"][-1]
         assert isinstance(reply, AIMessage)
-        messages: list[BaseMessage] = []
+        messages: list[AnyMessage] = []
         records: list[ToolCall] = []
         submitted = False
         # Run calls in order, all in this step: every call needs a result, and
@@ -208,7 +210,7 @@ def build_graph(model: BaseChatModel, toolbox: Toolbox, config: AgentConfig) -> 
     def after_tools(state: State) -> Literal["model", "__end__"]:
         return _END if state["stop_reason"] else "model"
 
-    graph = StateGraph(State)
+    graph: StateGraph[State, None, State, State] = StateGraph(State)
     graph.add_node("model", call_model)
     graph.add_node("tools", run_tools)
     graph.add_node("nudge", nudge)
@@ -227,7 +229,7 @@ def run_agent(
     """Run the loop on `task` until it stops; never raises for model or tool errors."""
     started = time.monotonic()
     initial: State = {
-        "messages": list(initial_messages(task)),
+        "messages": initial_messages(task),
         "tool_calls": [],
         "turns": 0,
         "input_tokens": 0,
@@ -240,9 +242,16 @@ def run_agent(
     }
     # Each turn takes up to four graph steps (model, tools or nudge, ...); the turn
     # limit stops the run well before LangGraph's own recursion limit would.
-    final = build_graph(model, toolbox, config).invoke(
-        initial, {"recursion_limit": 4 * config.max_turns + 10}
+    # invoke() is typed as returning a plain dict; the graph's output is a State.
+    final = cast(
+        State,
+        build_graph(model, toolbox, config).invoke(
+            initial, {"recursion_limit": 4 * config.max_turns + 10}
+        ),
     )
+    # Every path to END sets a stop reason; if one does not, that is a bug here.
+    if final["stop_reason"] is None:
+        raise AssertionError("agent loop ended without a stop reason")
     return AgentResult(
         stop_reason=final["stop_reason"],
         error=final["error"],
