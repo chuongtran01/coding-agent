@@ -31,6 +31,8 @@ class TestResult(BaseModel):
     apply, the suite never ran); `statuses` is then empty and the task scores unresolved.
     """
 
+    __test__ = False  # not a pytest test class, despite the name
+
     statuses: dict[str, TestStatus]
     valid: bool
     raw_output: str  # the end of the log, truncated to MAX_OUTPUT_CHARS
