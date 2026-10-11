@@ -26,8 +26,12 @@ _OUTPUT_TAIL_LINES = 20
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and run a subcommand; return the process exit code."""
     parser = argparse.ArgumentParser(prog="harness", description=__doc__.split("\n")[0])
-    sub = parser.add_subparsers(dest="command", required=True)
+    add_commands(parser.add_subparsers(dest="command", required=True))
+    return dispatch(parser.parse_args(argv))
 
+
+def add_commands(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add the harness subcommands (`run`, `validate`) to a command line."""
     run = sub.add_parser("run", help="evaluate one patch on one task")
     run.add_argument("instance_id")
     source = run.add_mutually_exclusive_group(required=True)
@@ -42,7 +46,9 @@ def main(argv: list[str] | None = None) -> int:
     validate = sub.add_parser("validate", help="check gold/empty/broken on dev tasks")
     validate.add_argument("--repeat", type=int, default=2, help="gold runs per task")
 
-    args = parser.parse_args(argv)
+
+def dispatch(args: argparse.Namespace) -> int:
+    """Run the harness subcommand that `args` names; return the exit code."""
     if args.command == "run":
         return _run(args)
     return _validate(args.repeat)

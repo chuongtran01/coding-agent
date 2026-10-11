@@ -65,7 +65,7 @@ The loop ends when the model calls `submit`, or when a limit is hit (turns, toke
 Seven tasks, in build order. Each one ends with something you can run.
 
 1. **Wire a swappable model client**
-    - Build the model with LangChain's `init_chat_model(config.model)`, where the model is a `"provider:model"` string such as `"google_genai:gemini-2.5-flash"` or `"anthropic:claude-sonnet-5-5"`. The agent code never imports a provider class, so switching is a config change or a `--model` flag.
+    - Build the model with LangChain's `init_chat_model(config.model)`, where the model is a `"provider:model"` string such as `"google_genai:gemini-3.8-flash"` or `"anthropic:claude-sonnet-5-5"`. The agent code never imports a provider class, so switching is a config change or a `--model` flag.
     - Install both adapters, `langchain-google-genai` and `langchain-anthropic`, and read `GOOGLE_API_KEY` and `ANTHROPIC_API_KEY` from `.env`. A key is needed only for the provider actually used.
     - Develop on a cheap Gemini Flash model. Record the model string in every run.
     - Keep provider differences in one `make_model(config)` function: prompt caching (explicit cache markers for Claude, automatic for recent Gemini models) and a small price table per model for `cost_usd`.

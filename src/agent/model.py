@@ -35,15 +35,9 @@ class Price(BaseModel):
 # Prices as of 2026-10. Tiers are (max prompt tokens, price), checked in order.
 # A model's prompt size is the input tokens of one turn, cached tokens included.
 _PRICES: dict[str, list[tuple[int | None, Price]]] = {
-    "google_genai:gemini-2.5-flash": [
-        (None, Price(input=0.30, output=2.50, cache_read=0.03, cache_write=0.30)),
-    ],
-    "google_genai:gemini-2.5-flash-lite": [
-        (None, Price(input=0.10, output=0.40, cache_read=0.01, cache_write=0.10)),
-    ],
-    "google_genai:gemini-2.5-pro": [
-        (200_000, Price(input=1.25, output=10.0, cache_read=0.125, cache_write=1.25)),
-        (None, Price(input=2.50, output=15.0, cache_read=0.25, cache_write=2.50)),
+    # Launch price through 2026-12-31; it doubles from 2027-01-01.
+    "google_genai:gemini-3.8-flash": [
+        (None, Price(input=0.75, output=3.75, cache_read=0.075, cache_write=0.75)),
     ],
     "anthropic:claude-haiku-5-5": [
         (100_000, Price(input=0.10, output=0.50, cache_read=0.01, cache_write=0.125)),
@@ -86,6 +80,10 @@ def make_model(config: AgentConfig) -> BaseChatModel:
     if provider == "anthropic":
         # model_kwargs survive bind_tools(); a bind(cache_control=...) would not.
         kwargs["model_kwargs"] = {"cache_control": {"type": "ephemeral"}}
+    elif provider == "google_genai":
+        # Gemini hides its reasoning unless asked; the summaries make trajectories
+        # explain why the agent did what it did.
+        kwargs["include_thoughts"] = True
     model: BaseChatModel = init_chat_model(
         config.model,
         max_tokens=MAX_OUTPUT_TOKENS,

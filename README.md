@@ -7,13 +7,15 @@ An autonomous bug-fixing agent for Python repos, built with LangGraph and evalua
 | Phase | Name | Status |
 | --- | --- | --- |
 | 1 | Sandbox + test runner (no AI) | Done |
-| 2 | Bare agent loop | Next |
+| 2 | Bare agent loop | In progress |
 | 3 | Context strategy plugins | Not started |
 | 4 | Graph traversal strategy | Not started |
 | 5 | Eval harness + experiments | Not started |
 | 6 | Polish | Not started |
 
 Phase 1 built the evaluation harness: given a task and a candidate patch, it starts a fresh container, applies the patch, runs the hidden tests and reports resolved or not. Spec in [docs/PHASE1.md](docs/PHASE1.md), dev tasks and measured runtimes in [docs/DEV_TASKS.md](docs/DEV_TASKS.md).
+
+Phase 2 builds the agent: an LLM loop that reads the issue, explores and edits the repo in an offline sandbox with four tools (`read`, `write`, `edit`, `bash`), and submits a diff that the harness scores. Spec in [docs/PHASE2.md](docs/PHASE2.md).
 
 ## Setup
 
@@ -25,7 +27,27 @@ Requirements:
 ```bash
 uv sync
 uv run pre-commit install   # run `make lint` before every commit
+cp .env.example .env        # then add GOOGLE_API_KEY or ANTHROPIC_API_KEY
 ```
+
+Only the key for the provider you run is needed.
+
+## Run the agent
+
+```bash
+uv run harness solve psf__requests-3362                    # one task (or several ids)
+uv run harness solve --dev                                 # every dev task
+uv run harness solve --dev --model anthropic:claude-sonnet-5-5
+uv run harness solve --dev --max-turns 20 --run-id my-batch
+```
+
+`solve` runs the agent on each task in a fresh offline sandbox, captures its diff, scores it with the harness and prints a line per task, then a total. It exits 0 if every task is resolved and 1 if not. These calls spend API credits.
+
+```text
+pytest-dev__pytest-5227      RESOLVED      submitted       26 turns    362k tok  $0.1617   0 tool errors   136s
+```
+
+The model is a `provider:model` string; the default is `google_genai:gemini-3.8-flash`. A model needs an entry in the price table in `src/agent/model.py`, so every run records its cost. Each run is saved under `runs/<run_id>/<instance_id>/` (git-ignored): `run.json` with the config, stop reason, tokens, cost and evaluation, `patch.diff`, and `trajectory.json` with every message and tool call. A run stops when the agent calls `submit` or hits a limit (30 turns, a token budget, a wall-clock budget); either way its diff is scored.
 
 ## Evaluate a patch
 
@@ -67,7 +89,14 @@ Tasks come from [`SWE-bench/SWE-bench_Lite`](https://huggingface.co/datasets/SWE
 
 ```text
 src/agent/
-  graph.py              LangGraph scaffold (replaced in Phase 2)
+  config.py             AgentConfig: the model string and the run limits
+  model.py              make_model (one place for provider differences) and cost_usd
+  tools.py              read, write, edit, bash, submit, run inside the sandbox
+  prompts.py            the system prompt and the first message, built from the issue only
+  graph.py              the LangGraph loop: model and tools until submit or a limit
+  solve.py              solve(task, config) -> Run: run, capture the diff, score, save
+  runs.py               save and load runs under runs/
+  cli.py                the `harness` command (solve, plus run and validate)
   harness/
     dataset.py          load SWE-bench Lite into Task models; the dev task list
     sandbox.py          one Docker container per attempt: exec, write_file, limits, cleanup
@@ -75,11 +104,11 @@ src/agent/
     runner.py           run_tests -> TestResult (official eval script + log parser)
     scoring.py          score / is_resolved (official SWE-bench grading)
     evaluate.py         evaluate(task, diff) -> Evaluation, the whole pipeline
-    cli.py              the `harness` command
+    cli.py              the run and validate subcommands
 tests/
   unit_tests/           fast, no Docker
   integration_tests/    need Docker and the dev task images
-docs/                   plan, Phase 1 spec, dev tasks and runtimes
+docs/                   plan, Phase 1 and 2 specs, dev tasks and runtimes
 ```
 
 ## Development
@@ -91,6 +120,6 @@ make lint                # ruff + mypy --strict
 make format              # ruff format and import sorting
 ```
 
-`tests/integration_tests/test_graph.py` exercises the LangGraph scaffold and needs a valid `LANGSMITH_API_KEY` in `.env` (see `.env.example`).
+Unit tests need no Docker or API keys: the loop is tested with a scripted fake model. Integration tests need Docker; `tests/integration_tests/test_solve.py` runs `solve()` end to end with a scripted agent, so it needs no API key either.
 
 The five dev tasks in `DEV_TASK_IDS` are used to build and tune the harness and agent, so they are excluded from benchmark numbers.

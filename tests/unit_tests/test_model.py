@@ -29,7 +29,7 @@ def test_provider_of() -> None:
 
 
 def test_make_model_gemini() -> None:
-    model = make_model(AgentConfig(model="google_genai:gemini-2.5-flash"))
+    model = make_model(AgentConfig(model="google_genai:gemini-3.8-flash"))
     assert isinstance(model, ChatGoogleGenerativeAI)
 
 
@@ -45,7 +45,7 @@ def test_make_model_claude_caches_after_bind_tools() -> None:
 
 def test_make_model_needs_only_the_used_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY")
-    make_model(AgentConfig(model="google_genai:gemini-2.5-flash"))
+    make_model(AgentConfig(model="google_genai:gemini-3.8-flash"))
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         make_model(AgentConfig(model="anthropic:claude-sonnet-5-5"))
 

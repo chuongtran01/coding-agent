@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is in progress, with its spec and seven numbered tasks in `docs/PHASE2.md`. Tasks 1-5 (model client, tools, prompts, loop, `solve` and saved runs) are built; 6-7 (the `solve` CLI and dev-task runs, isolation and limit checks) are not. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
+An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is in progress, with its spec and seven numbered tasks in `docs/PHASE2.md`. Tasks 1-5 (model client, tools, prompts, loop, `solve` and saved runs) and the `solve` command from task 6 are built; the dev-task review (rest of 6) and isolation and limit checks (7) are not. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
 
 ## Commands
 
@@ -17,6 +17,8 @@ uv run make format                         # apply ruff formatting and import so
 uv run pytest tests/unit_tests/test_graph.py::test_max_turns   # one test
 uv run harness run pallets__flask-4992 --gold                  # evaluate a patch (--empty, --patch FILE|-)
 uv run harness validate                                         # gold/empty/broken on every dev task
+uv run harness solve psf__requests-3362                         # run the agent on a task (spends API credits)
+uv run harness solve --dev [--model anthropic:claude-sonnet-5-5] [--run-id NAME]
 ```
 
 The pre-commit hook runs `uv run make lint`, so a commit fails on any ruff or mypy error. mypy runs `--strict` over `tests/` too.
@@ -25,7 +27,7 @@ SWE-bench images are x86_64 only; on Apple Silicon they run emulated, so contain
 
 ## Architecture
 
-Two layers, with a one-way dependency: the agent (`src/agent/*.py`) imports the harness (`src/agent/harness/`), never the reverse.
+Two layers, with a one-way dependency: the agent (`src/agent/*.py`) imports the harness (`src/agent/harness/`), never the reverse. That is why the `harness` command's entry point is `agent/cli.py`: it adds `solve` and reuses `run`/`validate` through `harness.cli.add_commands` and `dispatch`.
 
 **Harness (Phase 1).** `evaluate(task, diff)` starts a fresh container from the task's published SWE-bench image, applies the diff with `git apply`, runs the official SWE-bench eval script (which resets test files and applies the hidden `test_patch`), and grades the log with SWE-bench's own parser. `Sandbox` is one Docker container per attempt: `exec` and `write_file`, resource limits, removed on exit, repo at `/testbed` (`WORKDIR`).
 
@@ -52,5 +54,5 @@ Unit tests need no Docker or keys. `tests/unit_tests/shell.py` has `LocalShell`,
 
 ## Style
 
-- Docstrings follow ruff's Google convention (`D` rules, imperative first line) in `src/`; `tests/` is exempt. `print` is banned outside `harness/cli.py`.
+- Docstrings follow ruff's Google convention (`D` rules, imperative first line) in `src/`; `tests/` is exempt. `print` is banned outside the two CLI modules.
 - Commit messages: an imperative subject, then a body explaining the change and why; tasks end with a line like `Phase 2, task 4.`
