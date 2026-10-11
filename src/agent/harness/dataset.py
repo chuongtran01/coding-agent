@@ -7,7 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-DATASET_NAME = "princeton-nlp/SWE-bench_Lite"
+# The SWE-bench team's copy of Lite. Same tasks as princeton-nlp/SWE-bench_Lite, plus the
+# official image, eval script and log parser for each one.
+DATASET_NAME = "SWE-bench/SWE-bench_Lite"
 DEFAULT_SPLIT = "test"
 
 # Dev tasks for building and validating the harness; see docs/DEV_TASKS.md.
@@ -24,7 +26,8 @@ DEV_TASK_IDS: tuple[str, ...] = (
 class Task(BaseModel):
     """One SWE-bench Lite instance.
 
-    `gold_patch` and `test_patch` are evaluation-only and must never reach the agent.
+    `gold_patch`, `test_patch` and `eval_script` (which embeds `test_patch`) are
+    evaluation-only and must never reach the agent.
     Build one from a dataset row with `Task.model_validate(row)`.
     """
 
@@ -38,6 +41,11 @@ class Task(BaseModel):
     PASS_TO_PASS: tuple[str, ...]
     gold_patch: str = Field(validation_alias="patch")
     test_patch: str
+    version: str
+    image: str  # published Docker image with the repo installed at /testbed
+    eval_type: str
+    log_parser: str  # name of the SWE-bench parser for this repo's test output
+    eval_script: str  # official script: apply test_patch, run the tests
 
     @field_validator("FAIL_TO_PASS", "PASS_TO_PASS", mode="before")
     @classmethod

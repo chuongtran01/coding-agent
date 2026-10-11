@@ -47,12 +47,6 @@ class ExecResult(BaseModel):
     timed_out: bool
 
 
-def image_for(task: Task) -> str:
-    """Return the published SWE-bench image for a task."""
-    name = task.instance_id.replace("__", "_1776_").lower()
-    return f"swebench/sweb.eval.x86_64.{name}:latest"
-
-
 class Sandbox:
     """A running container for one attempt at one task.
 
@@ -77,10 +71,9 @@ class Sandbox:
     ) -> Generator[Sandbox, None, None]:
         """Start a container for `task` at its base commit, and remove it afterwards."""
         client = docker.from_env()
-        image = image_for(task)
-        _ensure_image(client, image)
+        _ensure_image(client, task.image)
         container = client.containers.run(
-            image,
+            task.image,
             command="sleep infinity",
             detach=True,
             platform=PLATFORM,

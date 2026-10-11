@@ -14,6 +14,7 @@ dependencies = [
     "langgraph>=1.0.0",
     "pydantic>=2.12",
     "python-dotenv>=1.0.1",
+    "swebench>=5.0.2",
 ]
 
 

@@ -18,6 +18,10 @@ ROW = {
     "FAIL_TO_PASS": json.dumps(["test_x.py::test_new"]),
     "PASS_TO_PASS": json.dumps(["test_x.py::test_a", "test_x.py::test_b"]),
     "environment_setup_commit": "b" * 40,
+    "image": "swebench/sweb.eval.x86_64.psf_1776_requests-0000:latest",
+    "eval_type": "pass_and_fail",
+    "log_parser": "parse_log_requests",
+    "eval_script": "#!/bin/bash\npytest -rA test_x.py\n",
 }
 
 
@@ -32,6 +36,11 @@ def test_model_validate_maps_fields() -> None:
         PASS_TO_PASS=("test_x.py::test_a", "test_x.py::test_b"),
         gold_patch="diff --git a/x.py b/x.py\n",
         test_patch="diff --git a/test_x.py b/test_x.py\n",
+        version="2.0",
+        image="swebench/sweb.eval.x86_64.psf_1776_requests-0000:latest",
+        eval_type="pass_and_fail",
+        log_parser="parse_log_requests",
+        eval_script="#!/bin/bash\npytest -rA test_x.py\n",
     )
 
 
