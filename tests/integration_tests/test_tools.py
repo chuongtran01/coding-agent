@@ -17,44 +17,48 @@ def tb() -> Iterator[Toolbox]:
         yield Toolbox(sb, bash_timeout_s=30)
 
 
+def run(tb: Toolbox, name: str, **args: object) -> str:
+    result = tb.run(name, args)
+    assert not result.is_error, result.output
+    return result.output
+
+
 def test_read_repo_root(tb: Toolbox) -> None:
-    out = tb.run("read", {"path": "."})
+    out = run(tb, "read", path=".")
     assert out.startswith("/testbed/ ")
     assert ".git/" in out.splitlines()
 
 
 def test_write_edit_read_and_diff(tb: Toolbox) -> None:
-    assert tb.run("write", {"path": "scratch/x.py", "content": "a = 1\nb = 2\n"})
-    assert tb.run(
-        "edit", {"path": "scratch/x.py", "old": "b = 2", "new": "b = 3"}
-    ).startswith("Edited")
-    assert "     2\tb = 3" in tb.run("read", {"path": "/testbed/scratch/x.py"})
-    diff = tb.run("bash", {"command": "git add -A && git diff --cached HEAD --stat"})
+    run(tb, "write", path="scratch/x.py", content="a = 1\nb = 2\n")
+    assert run(tb, "edit", path="scratch/x.py", old="b = 2", new="b = 3").startswith(
+        "Edited"
+    )
+    assert "     2\tb = 3" in run(tb, "read", path="/testbed/scratch/x.py")
+    diff = run(tb, "bash", command="git add -A && git diff --cached HEAD --stat")
     assert diff.startswith("exit code: 0") and "scratch/x.py" in diff
-    tb.run("bash", {"command": "git reset -q && rm -rf scratch"})
+    run(tb, "bash", command="git reset -q && rm -rf scratch")
 
 
 def test_edit_tracked_file_keeps_mode(tb: Toolbox) -> None:
-    path = tb.run("bash", {"command": "git ls-files '*.py' | head -1"}).splitlines()[1]
-    first = (
-        tb.run("read", {"path": path, "end_line": 1}).splitlines()[1].split("\t", 1)[1]
+    path = run(tb, "bash", command="git ls-files '*.py' | head -1").splitlines()[1]
+    first = run(tb, "read", path=path, end_line=1).splitlines()[1].split("\t", 1)[1]
+    assert run(tb, "edit", path=path, old=first, new=first + "  # x").startswith(
+        "Edited"
     )
-    assert tb.run(
-        "edit", {"path": path, "old": first, "new": first + "  # x"}
-    ).startswith("Edited")
-    diff = tb.run("bash", {"command": f"git diff -- {path}"})
+    diff = run(tb, "bash", command=f"git diff -- {path}")
     assert "+" + first + "  # x" in diff and "old mode" not in diff
-    tb.run("bash", {"command": f"git checkout -q -- {path}"})
+    run(tb, "bash", command=f"git checkout -q -- {path}")
 
 
 def test_bash_uses_task_python_and_no_network(tb: Toolbox) -> None:
-    assert "envs/testbed" in tb.run(
-        "bash", {"command": "python -c 'import sys; print(sys.prefix)'"}
-    )
-    out = tb.run(
+    prefix = run(tb, "bash", command="python -c 'import sys; print(sys.prefix)'")
+    assert "envs/testbed" in prefix
+    fetch = tb.run(
         "bash",
         {
-            "command": "python -c \"import urllib.request as u; u.urlopen('https://pypi.org', timeout=5)\""
+            "command": 'python -c "import urllib.request as u; '
+            "u.urlopen('https://pypi.org', timeout=5)\""
         },
     )
-    assert not out.startswith("exit code: 0")
+    assert fetch.exit_code not in (None, 0)
