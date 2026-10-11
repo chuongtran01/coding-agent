@@ -1,8 +1,1 @@
-"""New LangGraph Agent.
-
-This module defines a custom graph.
-"""
-
-from agent.graph import graph
-
-__all__ = ["graph"]
+"""A coding agent for SWE-bench Lite, and the harness that evaluates it."""

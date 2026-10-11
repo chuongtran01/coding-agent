@@ -55,7 +55,7 @@ The loop ends when the model calls `submit`, or when a limit is hit (turns, toke
 | --- | --- |
 | `tools.py` | `read`, `write`, `edit`, `bash`, `submit`: run inside a `Sandbox`, return text for the model |
 | `prompts.py` | The system prompt and the first user message built from an `AgentTask` |
-| `graph.py` | The LangGraph loop (replaces the scaffold; `langgraph.json` already points here) |
+| `graph.py` | The LangGraph loop (replaces the template scaffold) |
 | `solve.py` | `solve(task)`: start the sandbox, run the graph, capture the diff, evaluate, return a `Run` |
 | `runs.py` | Save and load runs under `runs/<run_id>/<instance_id>/` |
 | `harness/cli.py` | Add `solve <instance_id>` and `solve --dev` next to `run` and `validate` |
