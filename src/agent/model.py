@@ -35,6 +35,9 @@ class Price(BaseModel):
 # Prices as of 2026-10. Tiers are (max prompt tokens, price), checked in order.
 # A model's prompt size is the input tokens of one turn, cached tokens included.
 _PRICES: dict[str, list[tuple[int | None, Price]]] = {
+    "google_genai:gemini-2.5-flash": [
+        (None, Price(input=0.30, output=2.50, cache_read=0.03, cache_write=0.30)),
+    ],
     # Launch price through 2026-12-31; it doubles from 2027-01-01.
     "google_genai:gemini-3.8-flash": [
         (None, Price(input=0.75, output=3.75, cache_read=0.075, cache_write=0.75)),

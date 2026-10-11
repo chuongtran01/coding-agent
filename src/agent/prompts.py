@@ -46,8 +46,10 @@ issue asks you to change, that is expected: the hidden tests replace them. Do no
 edit them or undo your fix to make them pass.
 5. Delete any scratch files you created, then call submit.
 
-You have a limited number of turns, so act rather than describe what you plan to \
-do, and call submit once the fix is in place."""
+You have a limited number of turns, and each tool result ends with how many are \
+left. Aim to have your change in place by about half of them, and use the rest to \
+check it. Act rather than describe what you plan to do, and call submit once the \
+fix is in place and checked."""
 
 
 def first_message(task: AgentTask) -> str:

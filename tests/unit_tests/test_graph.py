@@ -11,7 +11,7 @@ from langchain_core.messages import (
 from langgraph.graph import END
 
 from agent.config import AgentConfig
-from agent.graph import _END, NUDGE, AgentResult, build_graph, run_agent
+from agent.graph import _END, NUDGE, AgentResult, build_graph, run_agent, turn_note
 from agent.harness.dataset import AgentTask
 from agent.tools import Toolbox
 
@@ -240,3 +240,31 @@ def test_result_round_trips_through_json(toolbox: Toolbox) -> None:
     assert [type(m) for m in loaded.messages] == [type(m) for m in result.messages]
     assert loaded.messages == result.messages
     assert loaded.tool_calls == result.tool_calls
+
+
+def test_turn_note_counts_down_and_warns_near_the_end() -> None:
+    assert turn_note(3, 30) == "[Turn 3 of 30 used; 27 left.]"
+    assert turn_note(25, 30).endswith(
+        "Make your change now if it is not in place, then call submit."
+    )
+    assert turn_note(30, 30).startswith("[Turn 30 of 30 used; 0 left.]")
+
+
+def test_last_tool_result_of_each_step_carries_the_turn_note(toolbox: Toolbox) -> None:
+    result, model = run(
+        toolbox,
+        [
+            ai(
+                call("bash", "a", command="echo one"),
+                call("bash", "b", command="echo two"),
+            ),
+            ai(call("submit", "c")),
+        ],
+    )
+    first, second = [m for m in model.seen[1] if isinstance(m, ToolMessage)]
+    assert "[Turn" not in str(first.content)  # one note per step, not per call
+    assert str(second.content).endswith(turn_note(1, CONFIG.max_turns))
+    # The records keep what the tool returned, without the note.
+    assert "[Turn" not in result.tool_calls[1].output
+    # No note after submit: the run is over.
+    assert "[Turn" not in str(result.messages[-1].content)

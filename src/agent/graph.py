@@ -42,6 +42,7 @@ NUDGE = (
     "submit if the fix is in place."
 )
 MAX_NUDGES = 1  # per stall: a turn with tool calls resets the count
+LOW_TURNS_LEFT = 5  # from here the turn note tells the agent to finish
 
 # LangGraph's END, typed as a Literal so the routers' return types can include it
 # (END itself is a plain str). LangGraph reads those return types to build the
@@ -178,6 +179,13 @@ def build_graph(
                     runtime_s=0.0,
                 )
             )
+        # The model cannot see the turn limit otherwise. One note per step, on the
+        # last result; the ToolCall records keep the tools' own output.
+        if messages and not submitted:
+            last = messages[-1]
+            last.content = (
+                f"{last.content}\n\n{turn_note(state['turns'], config.max_turns)}"
+            )
         update: StateUpdate = {
             "messages": messages,
             "tool_calls": records,
@@ -263,6 +271,15 @@ def run_agent(
         tool_calls=final["tool_calls"],
         runtime_s=time.monotonic() - started,
     )
+
+
+def turn_note(turns_used: int, max_turns: int) -> str:
+    """Return the note that tells the agent how many turns it has left."""
+    left = max(max_turns - turns_used, 0)
+    note = f"[Turn {turns_used} of {max_turns} used; {left} left.]"
+    if left <= LOW_TURNS_LEFT:
+        note += " Make your change now if it is not in place, then call submit."
+    return note
 
 
 def _limit_hit(state: State, config: AgentConfig) -> StopReason | None:
