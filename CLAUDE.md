@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is in progress, with its spec and seven numbered tasks in `docs/PHASE2.md`. Tasks 1-4 (model client, tools, prompts, loop) are built; 5-7 (`solve`, dev-task runs, isolation and limit checks) are not. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
+An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is in progress, with its spec and seven numbered tasks in `docs/PHASE2.md`. Tasks 1-5 (model client, tools, prompts, loop, `solve` and saved runs) are built; 6-7 (the `solve` CLI and dev-task runs, isolation and limit checks) are not. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
 
 ## Commands
 
@@ -31,7 +31,7 @@ Two layers, with a one-way dependency: the agent (`src/agent/*.py`) imports the 
 
 **Isolation is the core invariant.** `Task` holds evaluation-only fields (`gold_patch`, `test_patch`, `eval_script`, FAIL_TO_PASS tests); `Task.for_agent()` returns an `AgentTask` with only id, repo, base commit and issue text. Anything that reaches the model must be built from `AgentTask`. The agent's sandbox runs with the network off; only `evaluate()` turns it on, in a separate container. The five `DEV_TASK_IDS` are for building and tuning, and are excluded from benchmark numbers.
 
-**Agent (Phase 2).** One run is: `Sandbox.start(task)` → `Toolbox(sandbox, ...)` → `run_agent(task.for_agent(), make_model(config), toolbox, config)` → `AgentResult`. Task 5 adds `solve()`, which captures the diff (`git add -A && git diff --cached HEAD`), calls `evaluate()` and saves the run.
+**Agent (Phase 2).** One run is: `Sandbox.start(task)` → `Toolbox(sandbox, ...)` → `run_agent(task.for_agent(), make_model(config), toolbox, config)` → `AgentResult`. `solve(task, config)` wraps this: it captures the diff in the same offline sandbox (`git add -A && git diff --cached HEAD`, with git's messages kept out of it), scores it with `evaluate()` in a fresh container, and saves a `Run` under `runs/<run_id>/<instance_id>/` (`run.json` summary, `patch.diff`, `trajectory.json`). `runs/` is git-ignored; a run id names one batch.
 
 - `config.py`: `AgentConfig`, the model string (`"provider:model"`, passed to `init_chat_model`) and the limits.
 - `model.py`: every provider difference lives here; the rest of the agent sees a LangChain `BaseChatModel`. Claude's prompt caching is set through `model_kwargs`, because a `.bind(cache_control=...)` is dropped by the later `bind_tools()`. `make_model` refuses a model with no entry in `_PRICES`. `cost_usd` prices one turn, since price tiers depend on that turn's prompt size.
@@ -48,7 +48,7 @@ Conventions in the loop that are easy to break:
 
 ## Tests
 
-Unit tests need no Docker or keys. `tests/unit_tests/shell.py` has `LocalShell`, which runs the tools' real shell commands with the host's bash in a temp dir; `test_graph.py` has `ScriptedModel`, a fake chat model that replays fixed replies. Integration tests use the real dev-task containers, and share one per module where tests clean up after themselves.
+Unit tests need no Docker or keys. `tests/unit_tests/shell.py` has `LocalShell`, which runs the tools' real shell commands with the host's bash in a temp dir; `tests/unit_tests/fakes.py` has `ScriptedModel`, a fake chat model that replays fixed replies (`ai(call(...))` builds them). `tests/` is a package, so integration tests import these too; `tests/integration_tests/test_solve.py` runs `solve()` end to end with a scripted agent that applies the gold patch, so it needs Docker but no API key. Integration tests use the real dev-task containers, and share one per module where tests clean up after themselves.
 
 ## Style
 
