@@ -34,7 +34,8 @@ def evaluate(
     start = time.monotonic()
     tests: TestResult | None = None
     verdict: Score | None = None
-    with Sandbox.start(task) as sb:
+    # Network on: the eval script reinstalls the package, which fetches build tools.
+    with Sandbox.start(task, network=True) as sb:
         applied = apply_patch(sb, diff)
         if applied.applied:
             tests = run_tests(sb, task, timeout=test_timeout)

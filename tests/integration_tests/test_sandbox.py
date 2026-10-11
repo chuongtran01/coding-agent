@@ -62,3 +62,4 @@ def test_limits_applied() -> None:
     assert host_config["NanoCpus"] == 2 * 10**9
     assert host_config["PidsLimit"] == 1024
     assert host_config["Binds"] in (None, [])
+    assert host_config["NetworkMode"] == "none"

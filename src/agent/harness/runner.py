@@ -47,7 +47,9 @@ def run_tests(
 
     The script resets the test files to `base_commit`, applies `test_patch`, reinstalls
     the package where the repo needs it, and runs this repo's test command. Call it only
-    after the candidate patch is in place, since it reveals the hidden tests.
+    after the candidate patch is in place, since it reveals the hidden tests. Start the
+    sandbox with `network=True`: the reinstall fetches build tools from PyPI, and without
+    it repos installed non-editably (such as requests) are tested on the old code.
     """
     test_spec = make_test_spec(task.model_dump())
     sandbox.write_file(_EVAL_SCRIPT_PATH, test_spec.eval_script)

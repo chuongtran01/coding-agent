@@ -72,3 +72,17 @@ def test_base_commit_must_be_full_sha() -> None:
 def test_json_round_trip() -> None:
     task = Task.model_validate(ROW)
     assert Task.model_validate_json(task.model_dump_json()) == task
+
+
+def test_agent_view_has_no_hidden_fields() -> None:
+    view = Task.model_validate(ROW).for_agent()
+    assert set(type(view).model_fields) == {
+        "instance_id",
+        "repo",
+        "base_commit",
+        "problem_statement",
+    }
+    dumped = view.model_dump_json()
+    for hidden in ("gold_patch", "test_patch", "eval_script", "FAIL_TO_PASS"):
+        assert hidden not in dumped
+    assert ROW["patch"] not in dumped and ROW["test_patch"] not in dumped

@@ -37,3 +37,31 @@ Emulation is fast enough at about 4-6 s per evaluation, so there is no need to b
 - **Unlisted tests can fail.** `psf__requests-3362` reports 108 errors from tests that need a local httpbin server. None are in FAIL_TO_PASS or PASS_TO_PASS, so scoring must look only at the listed tests, never at pytest's exit code.
 - **Junk ids in the dataset.** `pytest-dev__pytest-5227` PASS_TO_PASS contains `[`, `[100%]` and `[100%]------------------------------`, fragments of pytest's progress output. SWE-bench's own parser produces the same fragments from the log, so they pass with the gold patch; a hand-written parser would not.
 - **Images add one commit.** `/testbed` has a `SWE-bench` commit on top of `base_commit` that only changes file modes. The sandbox accepts `base_commit` at `HEAD` or at `HEAD~1` under that commit. Diff an agent's work against `HEAD`, not `base_commit`, or the mode changes leak into the patch.
+
+## Isolation and limits (Task 7)
+
+Checked 2026-10-10 on all five dev tasks; `tests/integration_tests/test_isolation.py` repeats the checks.
+
+**What the agent's sandbox cannot reach**
+
+- **The fix in git.** After applying the gold patch and `test_patch`, none of the resulting file versions exist as git objects in a fresh container. There are no remotes, no unreachable objects, and every ref (tags included) is an ancestor of `HEAD`, so the image holds no future commits.
+- **The fix on disk.** The most distinctive lines the gold patch and `test_patch` add appear in no file in the container (whole filesystem searched), except for the `requests` gap below. Patch files and the eval script are written to `/tmp`, and only in the evaluation container.
+- **The network.** `Sandbox.start` disables networking by default, so the agent cannot fetch the upstream fix or a newer release. `evaluate()` starts a separate, fresh container with networking on, because the eval scripts reinstall the package and fetch build tools (`setuptools`, `flit_core`) from PyPI. Offline, that reinstall fails; editable installs still pass, but `psf__requests-3362` (installed with `pip install .`) tests the old code and the gold patch scores not resolved.
+- **Hidden fields on the host.** `Task.for_agent()` returns an `AgentTask` with only `instance_id`, `repo`, `base_commit` and `problem_statement`. Phase 2 hands the agent that, never the `Task`.
+
+**Known gap: newer `requests` releases in the images.** pip vendors its own `requests` (2.31.0 and 2.32.3) and conda's base environment installs `requests` 2.31.0, all outside the testbed environment. They include upstream fixes, so for the 6 `psf/requests` tasks in Lite an agent could find the fix in, for example, `/opt/miniconda3/lib/python3.11/site-packages/requests/models.py`. No other dev repo has a copy of its package outside `/testbed`, and pip vendors no other Lite repo. The images are left unchanged so results stay comparable with the official leaderboard, which uses the same images. In Phase 2, flag runs where the agent reads files of the task's package outside `/testbed`.
+
+**Limits on every run**
+
+| Limit | Value | Where |
+| --- | --- | --- |
+| Memory (no swap on top) | 4 GB | `Sandbox.start`, `mem_limit` and `memswap_limit` |
+| CPU | 2 cores | `Sandbox.start`, `nano_cpus` |
+| Processes | 1024 | `Sandbox.start`, `pids_limit` |
+| Network | off (on for evaluation only) | `Sandbox.start`, `network_mode` |
+| Host mounts | none | `Sandbox.start` |
+| Command timeout | 300 s default, 60 s for `git apply` and `mkdir`, 1800 s for the eval script | `Sandbox.exec` (coreutils `timeout`, SIGKILL 5 s later) |
+| Container lifetime | 4 h; an orphaned container stops by itself | `Sandbox.start`, `sleep` as the main process |
+| Cleanup | container removed on exit, even after an exception | `Sandbox.start`; `remove_leftover_containers()` after a crash |
+
+Disk usage is not limited: Docker Desktop's storage driver does not support per-container size limits.

@@ -27,6 +27,9 @@ DEFAULT_MEM_LIMIT = "4g"
 DEFAULT_CPUS = 2.0
 DEFAULT_PIDS_LIMIT = 1024
 DEFAULT_TIMEOUT_S = 300
+# The container's main process; an orphaned container (host process killed) stops by
+# itself after this long instead of running forever.
+DEFAULT_LIFETIME_S = 4 * 60 * 60
 
 # Exit codes from coreutils `timeout`: 124 after SIGTERM, 137 after the SIGKILL follow-up.
 _TIMEOUT_EXIT_CODES = (124, 137)
@@ -52,6 +55,8 @@ class Sandbox:
 
     Create it with `Sandbox.start(task)`; the container is removed when the block exits.
     Nothing from the host is mounted, so the container's filesystem is all the agent sees.
+    Networking is off unless asked for, so the agent cannot download the upstream fix;
+    evaluation turns it on because the eval scripts reinstall packages from PyPI.
     """
 
     def __init__(self, task: Task, container: Any) -> None:
@@ -68,13 +73,15 @@ class Sandbox:
         mem_limit: str = DEFAULT_MEM_LIMIT,
         cpus: float = DEFAULT_CPUS,
         pids_limit: int = DEFAULT_PIDS_LIMIT,
+        network: bool = False,
+        lifetime_s: int = DEFAULT_LIFETIME_S,
     ) -> Generator[Sandbox, None, None]:
         """Start a container for `task` at its base commit, and remove it afterwards."""
         client = docker.from_env()
         _ensure_image(client, task.image)
         container = client.containers.run(
             task.image,
-            command="sleep infinity",
+            command=f"sleep {lifetime_s}",
             detach=True,
             platform=PLATFORM,
             working_dir=WORKDIR,
@@ -82,6 +89,7 @@ class Sandbox:
             memswap_limit=mem_limit,  # no swap on top of the memory limit
             nano_cpus=int(cpus * 1e9),
             pids_limit=pids_limit,
+            network_mode=None if network else "none",
             labels={CONTAINER_LABEL: task.instance_id},
         )
         try:
@@ -114,7 +122,9 @@ class Sandbox:
         if not posixpath.isabs(path):
             path = posixpath.join(WORKDIR, path)
         directory, name = posixpath.split(path)
-        self._container.exec_run(["mkdir", "-p", directory])
+        mkdir = self.exec(f"mkdir -p {shlex.quote(directory)}", timeout=60)
+        if mkdir.exit_code != 0:
+            raise SandboxError(f"failed to create {directory}: {mkdir.output}")
 
         data = content.encode()
         buf = io.BytesIO()

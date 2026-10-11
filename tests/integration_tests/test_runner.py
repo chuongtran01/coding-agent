@@ -16,7 +16,7 @@ def _passed(status: str | None) -> bool:
 
 @pytest.mark.parametrize("task", DEV_TASKS, ids=lambda t: t.instance_id)
 def test_gold_patch_passes_listed_tests(task: Task) -> None:
-    with Sandbox.start(task) as sb:
+    with Sandbox.start(task, network=True) as sb:
         assert apply_patch(sb, task.gold_patch).applied
         result = run_tests(sb, task)
     assert result.valid and not result.timed_out
@@ -26,7 +26,7 @@ def test_gold_patch_passes_listed_tests(task: Task) -> None:
 
 @pytest.mark.parametrize("task", DEV_TASKS, ids=lambda t: t.instance_id)
 def test_empty_patch_fails_fail_to_pass(task: Task) -> None:
-    with Sandbox.start(task) as sb:
+    with Sandbox.start(task, network=True) as sb:
         result = run_tests(sb, task)
     assert result.valid
     assert not any(_passed(result.statuses.get(t)) for t in task.FAIL_TO_PASS)
@@ -34,7 +34,7 @@ def test_empty_patch_fails_fail_to_pass(task: Task) -> None:
 
 def test_timeout_is_reported() -> None:
     task = DEV_TASKS[0]
-    with Sandbox.start(task) as sb:
+    with Sandbox.start(task, network=True) as sb:
         result = run_tests(sb, task, timeout=1)
     assert result.timed_out
     assert not result.valid

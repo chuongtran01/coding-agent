@@ -23,6 +23,17 @@ DEV_TASK_IDS: tuple[str, ...] = (
 )
 
 
+class AgentTask(BaseModel):
+    """The part of a task the agent may see: no patches, no tests, no eval script."""
+
+    model_config = ConfigDict(frozen=True)
+
+    instance_id: str
+    repo: str
+    base_commit: str
+    problem_statement: str
+
+
 class Task(BaseModel):
     """One SWE-bench Lite instance.
 
@@ -52,6 +63,15 @@ class Task(BaseModel):
     def _parse_json_list(cls, value: Any) -> Any:
         """Parse a test list the dataset stores as a JSON string."""
         return json.loads(value) if isinstance(value, str) else value
+
+    def for_agent(self) -> AgentTask:
+        """Return the view of this task that is safe to hand to the agent."""
+        return AgentTask(
+            instance_id=self.instance_id,
+            repo=self.repo,
+            base_commit=self.base_commit,
+            problem_statement=self.problem_statement,
+        )
 
 
 def load_tasks(split: str = DEFAULT_SPLIT) -> dict[str, Task]:

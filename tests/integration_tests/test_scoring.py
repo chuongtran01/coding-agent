@@ -13,10 +13,10 @@ DEV_TASKS = load_dev_tasks()
 
 @pytest.mark.parametrize("task", DEV_TASKS, ids=lambda t: t.instance_id)
 def test_gold_resolves_and_empty_does_not(task: Task) -> None:
-    with Sandbox.start(task) as sb:
+    with Sandbox.start(task, network=True) as sb:
         assert apply_patch(sb, task.gold_patch).applied
         gold = score(task, run_tests(sb, task))
-    with Sandbox.start(task) as sb:
+    with Sandbox.start(task, network=True) as sb:
         empty = score(task, run_tests(sb, task))
     assert gold.resolved, gold
     assert not empty.resolved
