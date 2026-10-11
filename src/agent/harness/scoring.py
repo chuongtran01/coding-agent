@@ -25,6 +25,8 @@ Resolution = Literal["RESOLVED_FULL", "RESOLVED_PARTIAL", "RESOLVED_NO"]
 class TestOutcomes(BaseModel):
     """Listed tests split by whether they ended up where the task needs them."""
 
+    __test__ = False  # not a pytest test class, despite the name
+
     success: list[str]
     failure: list[str]
 

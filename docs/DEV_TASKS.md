@@ -16,19 +16,19 @@ Selection rule: repos without compiled extensions or heavy builds (excluding ast
 
 Swap a task out if its image or tests fight you; record the replacement and reason here.
 
-## Runtime (gold patch)
+## Runtime and validation
 
-Measured 2026-10-10 on an Apple Silicon Mac (Docker Desktop 29.8.2, 15 CPUs and 8 GB given to Docker), with the published x86_64 images running emulated. Each run: start the sandbox, apply the gold patch and `test_patch`, then run `pytest -rA` on the `.py` files `test_patch` touches. Range over two runs:
+Measured 2026-10-10 on an Apple Silicon Mac (Docker Desktop 29.8.2, 15 CPUs and 8 GB given to Docker), with the published x86_64 images running emulated, using `uv run harness validate`: two gold runs, one empty-patch run and one broken-patch run per task. All 20 runs scored as expected. A run covers container start, `git apply` of the candidate, the official eval script (reinstall, `test_patch`, tests), scoring and teardown.
 
-| Instance | Image size | Pull (once) | Container start | Test run | Total | Listed tests passed |
-| --- | --- | --- | --- | --- | --- | --- |
-| `psf__requests-3362` | 2.68 GB | 27 s | 1.3-1.8 s | 2.0-8.6 s | 4-13 s | 76 / 76 |
-| `pallets__flask-4992` | 2.94 GB | 52 s | 0.7-1.5 s | 1.9-2.6 s | 4-6 s | 19 / 19 |
-| `pytest-dev__pytest-5227` | 2.69 GB | 26 s | 0.7-1.1 s | 2.4-3.2 s | about 5 s | 34 / 34 (+3 junk ids, below) |
-| `pytest-dev__pytest-7220` | 2.68 GB | 33 s | 0.7-0.9 s | 1.0-1.3 s | 3-4 s | 12 / 12 |
-| `mwaskom__seaborn-3010` | about 2.7 GB | about 30 s | 0.9-1.5 s | 6.1-8.5 s | 8-12 s | 3 / 3 |
+| Instance | Image size | Pull (once) | Gold: tests | Gold: total | Empty: total | Broken: total | Listed tests (gold) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `psf__requests-3362` | 2.68 GB | 27 s | 2.8-2.9 s | 3.7-3.9 s | 3.3 s | 1.1 s | F2P 1/1, P2P 75/75 |
+| `pallets__flask-4992` | 2.94 GB | 52 s | 3.1 s | 4.0-4.1 s | 3.7 s | 0.9 s | F2P 1/1, P2P 18/18 |
+| `pytest-dev__pytest-5227` | 2.69 GB | 26 s | 4.7-5.0 s | 5.5-5.9 s | 5.3 s | 0.9 s | F2P 3/3, P2P 34/34 |
+| `pytest-dev__pytest-7220` | 2.68 GB | 33 s | 4.2 s | 5.1-5.2 s | 4.5 s | 1.0 s | F2P 1/1, P2P 11/11 |
+| `mwaskom__seaborn-3010` | about 2.7 GB | about 30 s | 4.2-4.3 s | 5.0-5.2 s | 4.7 s | 0.8 s | F2P 1/1, P2P 2/2 |
 
-Emulation is fast enough at about 3-13 s per evaluation, so there is no need to build arm64 images. Image pulls dominate a first run; keep images between runs.
+Emulation is fast enough at about 4-6 s per evaluation, so there is no need to build arm64 images. Image pulls dominate a first run; keep images between runs. The empty patch fails exactly the FAIL_TO_PASS tests and keeps every PASS_TO_PASS test passing; the broken patch (one removed line altered) stops at `git apply` and reports git's error.
 
 ## Findings for Tasks 4-5
 

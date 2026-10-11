@@ -1,9 +1,8 @@
 """Needs Docker and the dev task images; see test_sandbox.py."""
 
-import re
-
 import pytest
 
+from agent.harness.cli import break_patch
 from agent.harness.dataset import Task, load_dev_tasks
 from agent.harness.patch import apply_patch
 from agent.harness.sandbox import Sandbox
@@ -29,14 +28,7 @@ def test_empty_patch_changes_nothing() -> None:
 
 def test_broken_patch_reports_error_and_leaves_tree_clean() -> None:
     task = DEV_TASKS[0]
-    # Change a removed line so the hunk no longer matches the file.
-    broken = re.sub(
-        r"^-(?!--)(.*)$",
-        r"-\1  # not in the file",
-        task.gold_patch,
-        count=1,
-        flags=re.M,
-    )
+    broken = break_patch(task.gold_patch)
     with Sandbox.start(task) as sb:
         result = apply_patch(sb, broken)
         status = sb.exec("git status --porcelain").output
