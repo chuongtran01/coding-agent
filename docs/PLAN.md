@@ -13,8 +13,8 @@ A single-pass, autonomous bug-fixing agent (Python, LangGraph). It takes a SWE-b
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Research | Not started |
-| 1 | Sandbox + test runner (no AI) | **Current** |
-| 2 | Bare agent loop | Not started |
+| 1 | Sandbox + test runner (no AI) | Done |
+| 2 | Bare agent loop | **Next** |
 | 3 | Context strategy plugins | Not started |
 | 4 | Graph traversal strategy | Not started |
 | 5 | Eval harness + experiments | Not started |
@@ -28,11 +28,13 @@ Phase 0 reading can run alongside Phase 1 (read SWE-agent's eval harness first, 
 
 **Goal:** run one SWE-bench-lite task end-to-end programmatically, with a known-good patch, and get a correct pass/fail. No LLM involved yet.
 
+**Done.** What was built, and where it differs from the plan below, is in [PHASE1.md](PHASE1.md); runtimes and findings are in [DEV_TASKS.md](DEV_TASKS.md).
+
 ### Tasks
 
 1. **Load the dataset**
-   - Pull SWE-bench-lite via Hugging Face `datasets` (`princeton-nlp/SWE-bench_Lite`)
-   - Write a `Task` dataclass: `instance_id`, `repo`, `base_commit`, `problem_statement`, `FAIL_TO_PASS`, `PASS_TO_PASS`, `gold_patch`, `test_patch`
+   - Pull SWE-bench-lite via Hugging Face `datasets` (`SWE-bench/SWE-bench_Lite`, the SWE-bench team's copy of `princeton-nlp/SWE-bench_Lite` with each task's image and eval script)
+   - Write a `Task` model: `instance_id`, `repo`, `base_commit`, `problem_statement`, `FAIL_TO_PASS`, `PASS_TO_PASS`, `gold_patch`, `test_patch`
    - Pick 3-5 small tasks to develop against, favoring repos that are quick to install
 
 2. **Build the sandbox**

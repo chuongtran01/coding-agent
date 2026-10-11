@@ -6,8 +6,8 @@ An autonomous bug-fixing agent for Python repos, built with LangGraph and evalua
 
 | Phase | Name | Status |
 | --- | --- | --- |
-| 1 | Sandbox + test runner (no AI) | Tasks 1-6 done; Task 7 (isolation checks) next |
-| 2 | Bare agent loop | Not started |
+| 1 | Sandbox + test runner (no AI) | Done |
+| 2 | Bare agent loop | Next |
 | 3 | Context strategy plugins | Not started |
 | 4 | Graph traversal strategy | Not started |
 | 5 | Eval harness + experiments | Not started |

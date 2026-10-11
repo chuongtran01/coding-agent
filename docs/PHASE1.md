@@ -1,6 +1,6 @@
 # Phase 1: Sandbox + Test Runner (Details)
 
-As of 2026-10-06. Expands Phase 1 of [PLAN.md](PLAN.md).
+As of 2026-10-10. Expands Phase 1 of [PLAN.md](PLAN.md). **Status: done.** Dev tasks, measured runtimes and findings are in [DEV_TASKS.md](DEV_TASKS.md).
 
 ## Overview
 
@@ -28,126 +28,139 @@ Phase 1 covers the harness only; anything that generates a patch belongs to Phas
 | Scoring resolved / not resolved | Cost, token and latency tracking (only wall-clock runtime is recorded) |
 | Gold, empty and broken patch validation | Non-Python repos, feature tasks, chat mode |
 
-Phase 0 reading of the SWE-agent eval harness runs alongside this phase and should land first, since it shapes the sandbox decision.
-
 ## Architecture
 
-The harness is a straight pipeline with one hard boundary: hidden tests are added only after the candidate patch is in place.
+The harness is a straight pipeline with one hard boundary: hidden tests appear only after the candidate patch is final, in a separate container from the one the agent works in.
 
 ```mermaid
 flowchart LR
-    subgraph agent["Agent-visible: the agent works here from Phase 2"]
-        A["Load dataset<br/>SWE-bench Lite row to Task"] --> B["Start sandbox<br/>container at base_commit"]
-        B --> C["Apply patch<br/>git apply, returns ApplyResult"]
+    subgraph agent["Agent sandbox (from Phase 2): network off, sees AgentTask only"]
+        A["Load dataset<br/>row to Task; agent gets task.for_agent()"] --> B["Start sandbox<br/>container at base_commit"]
+        B --> C["Agent edits files<br/>diff = git diff HEAD"]
     end
-    subgraph eval["Evaluation only: test_patch and gold patch never reach the agent"]
-        D["Apply test_patch<br/>adds the FAIL_TO_PASS tests"] --> E["Run tests<br/>FAIL_TO_PASS + PASS_TO_PASS"]
-        E --> F["Score<br/>resolved / not resolved"]
+    subgraph eval["Evaluation sandbox: fresh container, network on"]
+        D["Apply patch<br/>git apply, returns ApplyResult"] --> E["Run official eval script<br/>reset tests, apply test_patch, reinstall, run tests"]
+        E --> F["Score<br/>SWE-bench grading, resolved / not resolved"]
     end
-    C -- "candidate patch in place" --> D
+    C -- "candidate diff (a string)" --> D
 ```
 
-In Phase 1 the candidate patch is the gold, empty or broken patch; from Phase 2 the agent produces it. A patch that fails `git apply` stops the run and scores not resolved.
+In Phase 1 the candidate diff is the gold, empty or broken patch; from Phase 2 the agent produces it. A patch that fails `git apply` stops the run and scores not resolved. Only the diff crosses from the agent's container to the evaluation container, so nothing else the agent did (installed packages, stray files) affects the score, as in official SWE-bench.
 
-**Proposed module layout** (under `src/agent/harness/`)
+**Module layout** (under `src/agent/harness/`)
 
 | Module | Responsibility |
 | --- | --- |
-| `dataset.py` | Load SWE-bench Lite, build `Task` objects, select dev tasks |
-| `sandbox.py` | Start, exec in, and tear down a container per attempt, with timeout and limits |
+| `dataset.py` | Load SWE-bench Lite into `Task` models, the agent-safe `AgentTask` view, the dev task list |
+| `sandbox.py` | Start, exec in, and tear down a container per attempt, with timeouts, limits and network control |
 | `patch.py` | `apply_patch` and `ApplyResult` |
-| `runner.py` | Apply `test_patch`, run tests, parse into `TestResult` |
-| `scoring.py` | `is_resolved`, reusing SWE-bench grading |
-| `cli.py` | The one command: task id + patch file in, verdict and runtime out |
+| `runner.py` | Run the task's official eval script, parse the log into `TestResult` |
+| `scoring.py` | `score` / `is_resolved`, using SWE-bench's grading |
+| `evaluate.py` | `evaluate(task, diff)`: the whole pipeline in a fresh container; Phase 2 calls this |
+| `cli.py` | The `harness` command: `run` (task id + patch in, verdict and runtime out) and `validate` |
 
 ## Implementation tasks
 
-Seven tasks, in build order. Each one ends with something you can run.
+Seven tasks, in build order. Each one ends with something you can run. All seven are done.
 
 1. **Load the dataset**
-    - Pull `princeton-nlp/SWE-bench_Lite` with Hugging Face `datasets`.
-    - Map each row to a `Task` dataclass: `instance_id`, `repo`, `base_commit`, `problem_statement`, `FAIL_TO_PASS`, `PASS_TO_PASS`, `gold_patch`, `test_patch`.
-    - The dataset stores the gold patch as `patch` and the two test lists as JSON strings; parse them into `list[str]` at load time.
-    - Pick 3-5 dev tasks from repos that install quickly.
+    - Load `SWE-bench/SWE-bench_Lite` with Hugging Face `datasets`. It is the SWE-bench team's copy of `princeton-nlp/SWE-bench_Lite`: the same 300 tasks (corrected test lists for `sympy__sympy-13177`), plus each task's published image, official eval script and log parser.
+    - Map each row to a frozen pydantic `Task`. The dataset calls the gold patch `patch`, and older copies store the two test lists as JSON strings; both are handled at load time.
+    - Dev tasks: five from requests, flask, pytest and seaborn, listed with the reasons in [DEV_TASKS.md](DEV_TASKS.md).
 2. **Build the sandbox**
-    - One Docker container per attempt, with a fresh working copy at `base_commit` and the repo's dependencies installed.
-    - The agent's filesystem is the container only; nothing on the host is mounted.
-    - Use SWE-bench's published per-instance images (faster start, comparable numbers). Time one gold-patch run per dev task; build images locally only if emulated runtime is too high.
+    - One Docker container per attempt from SWE-bench's published per-instance image, which has the repo at `/testbed` and its dependencies installed in a conda env. The sandbox checks the repo is at `base_commit` (the images add one mode-only `SWE-bench` commit on top).
+    - The images are x86_64 only; on Apple Silicon they run emulated, at about 4-6 s per evaluation, so no local builds are needed.
+    - Nothing on the host is mounted; the container's filesystem is all the agent sees.
 3. **Apply patches**
-    - `apply_patch(sandbox, diff)` runs `git apply` inside the container.
-    - Returns a structured result: applied or not, plus the error text.
+    - `apply_patch(sandbox, diff)` writes the diff to a file outside `/testbed` and runs `git apply` on it, all or nothing.
+    - Returns an `ApplyResult`: applied or not, plus git's error text. An empty diff counts as applied and changes nothing.
 4. **Run tests**
-    - Apply `test_patch` only at evaluation time, never before the agent runs.
-    - Run FAIL_TO_PASS and PASS_TO_PASS, then parse a status per test.
-    - Return `TestResult`: per-test status, truncated raw output, runtime.
+    - `run_tests(sandbox, task)` runs the task's official eval script, which resets the test files to `base_commit`, applies `test_patch`, reinstalls the package where the repo needs it, and runs the repo's own test command (Django uses `./tests/runtests.py`, not pytest).
+    - The log is parsed with SWE-bench's `get_logs_eval`: the repo's log parser plus upstream's validity checks (markers present, test exit code consistent with the log).
+    - Returns a `TestResult`: per-test status, whether the log is valid, the end of the raw output, runtime, timed out.
 5. **Score**
-    - Resolved = every FAIL_TO_PASS test passes and every PASS_TO_PASS test still passes.
-    - Reuse the official SWE-bench log parsers and grading where possible.
+    - Resolved = every FAIL_TO_PASS test passes and every PASS_TO_PASS test still passes, computed with SWE-bench's `get_eval_tests_report` and `get_resolution_status`.
+    - An invalid run resolves nothing, and a listed test missing from the log counts as a failure.
 6. **Validate the harness**
-    - Gold patch: must score resolved. Empty patch: must not. Broken patch: must not, with a readable error.
-    - If the gold patch ever fails, fix the harness before moving on.
+    - `uv run harness validate` runs the gold patch twice, the empty patch and a broken patch on every dev task. All 20 runs score as expected; the broken patch reports git's error.
 7. **Check isolation and limits**
-    - Confirm hidden tests and the gold patch are unreadable from anything the agent will later see.
-    - Put a timeout and CPU/memory limits on every container run.
+    - The agent's sandbox has no network, no remotes or future commits in git, and no copy of the fixed files or hidden tests, except for newer `requests` releases bundled in the images (6 Lite tasks; see [DEV_TASKS.md](DEV_TASKS.md)).
+    - Every container has memory, CPU, process and lifetime limits, and every command a timeout. `tests/integration_tests/test_isolation.py` repeats the checks.
 
-**Core types (proposed)**
+**Core types**
 
 ```python
-@dataclass(frozen=True)
-class Task:
+class Task(BaseModel):  # frozen
     instance_id: str
     repo: str
     base_commit: str
     problem_statement: str
-    FAIL_TO_PASS: list[str]
-    PASS_TO_PASS: list[str]
-    gold_patch: str
-    test_patch: str
+    FAIL_TO_PASS: tuple[str, ...]
+    PASS_TO_PASS: tuple[str, ...]
+    gold_patch: str      # evaluation only
+    test_patch: str      # evaluation only
+    version: str
+    image: str
+    eval_type: str
+    log_parser: str
+    eval_script: str     # evaluation only; embeds test_patch
 
-@dataclass
-class ApplyResult:
+    def for_agent(self) -> AgentTask: ...  # instance_id, repo, base_commit, problem_statement
+
+class ApplyResult(BaseModel):
     applied: bool
     error: str | None
 
-@dataclass
-class TestResult:
-    statuses: dict[str, Literal["passed", "failed", "error", "skipped"]]
-    raw_output: str  # truncated
+class TestResult(BaseModel):
+    statuses: dict[str, Literal["PASSED", "FAILED", "SKIPPED", "ERROR", "XFAIL"]]
+    valid: bool
+    raw_output: str  # end of the log
     runtime_s: float
+    timed_out: bool
+
+class Score(BaseModel):
+    resolved: bool
+    status: Literal["RESOLVED_FULL", "RESOLVED_PARTIAL", "RESOLVED_NO"]
+    fail_to_pass: TestOutcomes  # success / failure lists
+    pass_to_pass: TestOutcomes
 
 def apply_patch(sandbox: Sandbox, diff: str) -> ApplyResult: ...
 def run_tests(sandbox: Sandbox, task: Task) -> TestResult: ...
+def score(task: Task, result: TestResult) -> Score: ...
 def is_resolved(task: Task, result: TestResult) -> bool: ...
+def evaluate(task: Task, diff: str) -> Evaluation: ...
 ```
+
+Status names follow SWE-bench's, so `TestResult.statuses` goes straight into its grading.
 
 ## Definition of done
 
 Phase 1 is done when every box below is ticked.
 
-- [ ] One command runs a task plus a patch through the sandbox and prints resolved / not resolved.
-- [ ] The gold patch resolves all 3-5 dev tasks, on repeated runs.
-- [ ] The empty patch scores not resolved on every dev task.
-- [ ] A broken patch scores not resolved and surfaces the `git apply` error.
-- [ ] Hidden tests and the gold patch are not readable from inside the agent's sandbox before evaluation.
-- [ ] Every container run has a timeout and resource limits.
-- [ ] Runtime per task is measured and written down; it feeds the Phase 5 cost estimates.
+- [x] One command runs a task plus a patch through the sandbox and prints resolved / not resolved (`uv run harness run <instance_id> --patch <file>`).
+- [x] The gold patch resolves all 3-5 dev tasks, on repeated runs.
+- [x] The empty patch scores not resolved on every dev task.
+- [x] A broken patch scores not resolved and surfaces the `git apply` error.
+- [x] Hidden tests and the gold patch are not readable from inside the agent's sandbox before evaluation (known gap: newer `requests` releases in the images, documented in [DEV_TASKS.md](DEV_TASKS.md)).
+- [x] Every container run has a timeout and resource limits.
+- [x] Runtime per task is measured and written down; it feeds the Phase 5 cost estimates.
 
 ## Risks and open questions
 
-The biggest risk is environment setup, not code.
+The biggest risk was environment setup, not code. How each risk turned out:
 
-| Risk | Mitigation |
+| Risk | Outcome |
 | --- | --- |
-| Dependency installs for old repo versions fail or take hours | Start with the easiest repos; drop any task that fights you |
-| Docker images and disk usage grow fast | Prune containers and dangling images between runs |
-| Published SWE-bench images are x86_64; this machine runs macOS, likely on Apple Silicon | Expect slow emulation, or build arm64 images locally if runtime is too high |
-| Harness quietly disagrees with official scoring | Reuse SWE-bench's own grading and check gold-patch results against it |
-| Hidden tests leak into what the agent sees | Apply `test_patch` only after the agent finishes, in the evaluation step |
+| Dependency installs for old repo versions fail or take hours | Avoided: the published images come with dependencies installed |
+| Docker images and disk usage grow fast | About 3 GB per task image, about 14 GB for the dev tasks. Containers are removed after each run; keep images between runs |
+| Published SWE-bench images are x86_64; this machine is Apple Silicon | Emulation is fast enough: about 4-6 s per evaluation |
+| Harness quietly disagrees with official scoring | Uses SWE-bench's own eval scripts, log parsers and grading; gold resolves every dev task |
+| Hidden tests leak into what the agent sees | `test_patch` is applied only in the evaluation container. The agent's sandbox is offline and gets `AgentTask` only. Remaining gap: newer `requests` releases in the images |
 
-**Open questions**
+**Open questions, answered**
 
-- Published images or self-built images? Decided: start with published images; build locally only if emulated runtime is too high.
-- Call the `swebench` package directly, or wrap only its log parsers and grading?
-- Which 3-5 dev tasks? Record the picks and why in the repo.
+- Published images or self-built images? Published images; emulated runtime is fine.
+- Call the `swebench` package directly, or wrap only its log parsers and grading? Use it directly for `make_test_spec`, `get_logs_eval` and its grading functions, and run the dataset's eval scripts unchanged. Its own Docker orchestration is not used.
+- Which 3-5 dev tasks? Five, recorded with reasons in [DEV_TASKS.md](DEV_TASKS.md).
 
-**Next:** Phase 2 plugs a bare agent loop (four tools, about 5 iterations) into this harness.
+**Next:** Phase 2 plugs a bare agent loop (four tools, about 5 iterations) into this harness: the agent works in an offline `Sandbox` from `task.for_agent()`, and its `git diff HEAD` goes to `evaluate()`.
