@@ -19,7 +19,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from agent.harness.sandbox import WORKDIR, ExecResult
 
-MAX_READ_CHARS = 40_000
+# About 4k tokens, or 300-400 lines of code. Every turn resends the history, so a
+# whole large file read a few times can use up the token budget (docs/DEV_RUNS.md).
+MAX_READ_CHARS = 16_000
 MAX_LINE_CHARS = 1_000
 MAX_BASH_CHARS = 20_000
 EDIT_CONTEXT_LINES = 3

@@ -1,5 +1,7 @@
 # Dev Runs (Phase 2)
 
+> **After these runs:** `pallets__flask-4992` was replaced by `pytest-dev__pytest-7432` (see [DEV_TASKS.md](DEV_TASKS.md)), and the `read` cap was lowered from 40,000 to 16,000 characters. The numbers below are for the old task set and cap; the baseline needs re-measuring before Phase 3 compares against it.
+
 As of 2026-10-11. The agent built in Phase 2 ([PHASE2.md](PHASE2.md)), run on the five dev tasks ([DEV_TASKS.md](DEV_TASKS.md)) with `uv run harness solve --dev`, and every failed run read by hand (task 6). Runs are saved under `runs/` (git-ignored); run ids are given so they can be reloaded with `agent.runs.load_run`.
 
 ## Baseline result
@@ -59,6 +61,6 @@ These are the model's reasoning, which Phase 2 does not tune.
 
 ## Open
 
-- Whether the 40,000-character `read` cap is too high: long files fill the context and the token budget fast. A lower cap (or a default range) is a tool change to test against these numbers, not a prompt change.
+- The `read` cap is now 16,000 characters (was 40,000): long files filled the context and the token budget fast. Its effect is not measured yet.
 - One run per task is noisy (`psf__requests-3362` went resolved, unresolved, resolved with no change in between). Compare changes on at least three batches.
 - A Claude comparison (`--model anthropic:claude-sonnet-5-5`), suggested in [PHASE2.md](PHASE2.md), needs an Anthropic key.

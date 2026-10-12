@@ -7,7 +7,7 @@ All five come from the `test` split, because SWE-bench publishes per-instance im
 | Instance | FAIL_TO_PASS | PASS_TO_PASS | Why |
 | --- | --- | --- | --- |
 | `psf__requests-3362` | 1 | 75 | Pure Python, small dependency set; single target test |
-| `pallets__flask-4992` | 1 | 18 | Pure Python, short test run |
+| `pytest-dev__pytest-7432` | 1 | 77 | Pure Python; the issue states the expected output its hidden test checks (replaced `pallets__flask-4992`, see below) |
 | `pytest-dev__pytest-5227` | 3 | 34 | Pure Python; several FAIL_TO_PASS tests exercise per-test parsing |
 | `pytest-dev__pytest-7220` | 1 | 11 | Smallest PASS_TO_PASS set among quick-install repos |
 | `mwaskom__seaborn-3010` | 1 | 2 | Different repo shape (numpy/pandas/matplotlib stack), very short run |
@@ -16,6 +16,8 @@ Selection rule: repos without compiled extensions or heavy builds (excluding ast
 
 Swap a task out if its image or tests fight you; record the replacement and reason here.
 
+**2026-10-11: `pallets__flask-4992` replaced by `pytest-dev__pytest-7432`.** The issue asks for a file mode parameter and suggests `mode="b"`; the hidden test calls `from_file(..., text=False)`, the name upstream chose. The agent added `mode` in all six Phase 2 runs, so no fix that follows the issue can pass, and the task only added noise to comparisons ([DEV_RUNS.md](DEV_RUNS.md)). Lite's other two Flask tasks have the same problem (`flask-4045` requires `ValueError` where the code's existing pattern is `assert`; `flask-5063` checks an exact output format), so Flask is no longer represented. `pytest-7432` was picked because its issue gives the exact expected line (`SKIPPED [1] test_it.py:3: unconditional skip`) that its hidden test checks. Validated like the others: gold resolves, empty fails exactly its FAIL_TO_PASS test, a broken patch stops at `git apply`, and the isolation tests pass.
+
 ## Runtime and validation
 
 Measured 2026-10-10 on an Apple Silicon Mac (Docker Desktop 29.8.2, 15 CPUs and 8 GB given to Docker), with the published x86_64 images running emulated, using `uv run harness validate`: two gold runs, one empty-patch run and one broken-patch run per task. All 20 runs scored as expected. A run covers container start, `git apply` of the candidate, the official eval script (reinstall, `test_patch`, tests), scoring and teardown.
@@ -23,7 +25,7 @@ Measured 2026-10-10 on an Apple Silicon Mac (Docker Desktop 29.8.2, 15 CPUs and 
 | Instance | Image size | Pull (once) | Gold: tests | Gold: total | Empty: total | Broken: total | Listed tests (gold) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `psf__requests-3362` | 2.68 GB | 27 s | 2.8-2.9 s | 3.7-3.9 s | 3.3 s | 1.1 s | F2P 1/1, P2P 75/75 |
-| `pallets__flask-4992` | 2.94 GB | 52 s | 3.1 s | 4.0-4.1 s | 3.7 s | 0.9 s | F2P 1/1, P2P 18/18 |
+| `pytest-dev__pytest-7432` | 2.68 GB | about 20 s (from the first run's total) | 5.8-7.0 s | 7.4 s | 11.0 s | not timed | F2P 1/1, P2P 77/77 |
 | `pytest-dev__pytest-5227` | 2.69 GB | 26 s | 4.7-5.0 s | 5.5-5.9 s | 5.3 s | 0.9 s | F2P 3/3, P2P 34/34 |
 | `pytest-dev__pytest-7220` | 2.68 GB | 33 s | 4.2 s | 5.1-5.2 s | 4.5 s | 1.0 s | F2P 1/1, P2P 11/11 |
 | `mwaskom__seaborn-3010` | about 2.7 GB | about 30 s | 4.2-4.3 s | 5.0-5.2 s | 4.7 s | 0.8 s | F2P 1/1, P2P 2/2 |

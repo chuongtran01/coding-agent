@@ -16,7 +16,7 @@ DEFAULT_SPLIT = "test"
 # These are tuned against, so exclude them from Phase 5 benchmark numbers.
 DEV_TASK_IDS: tuple[str, ...] = (
     "psf__requests-3362",
-    "pallets__flask-4992",
+    "pytest-dev__pytest-7432",
     "pytest-dev__pytest-5227",
     "pytest-dev__pytest-7220",
     "mwaskom__seaborn-3010",
