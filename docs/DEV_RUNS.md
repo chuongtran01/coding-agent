@@ -1,25 +1,29 @@
 # Dev Runs (Phase 2)
 
-> **After these runs:** `pallets__flask-4992` was replaced by `pytest-dev__pytest-7432` (see [DEV_TASKS.md](DEV_TASKS.md)), and the `read` cap was lowered from 40,000 to 16,000 characters. The numbers below are for the old task set and cap; the baseline needs re-measuring before Phase 3 compares against it.
-
 As of 2026-10-11. The agent built in Phase 2 ([PHASE2.md](PHASE2.md)), run on the five dev tasks ([DEV_TASKS.md](DEV_TASKS.md)) with `uv run harness solve --dev`, and every failed run read by hand (task 6). Runs are saved under `runs/` (git-ignored); run ids are given so they can be reloaded with `agent.runs.load_run`.
 
 ## Baseline result
 
-Gemini 2.5 Flash (`google_genai:gemini-2.5-flash`), default limits (30 turns, 1M tokens, 30 min wall clock, 120 s per `bash` command), the prompt as of commit `cb19f19`. Three batches: `dev-g25-v3-1`, `-2`, `-3`.
+This is the number Phase 3 compares against. Gemini 2.5 Flash (`google_genai:gemini-2.5-flash`), default limits (30 turns, 1M tokens, 30 min wall clock, 120 s per `bash` command), the code as of commit `da6ce08`: the prompt from `cb19f19`, the `read` cap at 16,000 characters, and `pytest-dev__pytest-7432` in place of `pallets__flask-4992`. Three batches: `dev-g25-v4-1`, `-2`, `-3`.
 
 | Instance | Resolved | Turns | Mean cost | Mean runtime | Stops |
 | --- | --- | --- | --- | --- | --- |
-| `psf__requests-3362` | 2/3 | 30, 14, 15 | $0.056 | 120 s | submitted ×3 |
-| `pallets__flask-4992` | 0/3 | 18, 15, 30 | $0.037 | 87 s | submitted ×2, max_turns |
-| `pytest-dev__pytest-5227` | 3/3 | 4, 4, 4 | $0.002 | 15 s | submitted ×3 |
-| `pytest-dev__pytest-7220` | 1/3 | 29, 22, 30 | $0.119 | 147 s | submitted, max_tokens, max_turns |
-| `mwaskom__seaborn-3010` | 3/3 | 5, 4, 11 | $0.006 | 26 s | submitted ×3 |
-| **All** | **9/15 (60%)** | | **$0.044/task** | **79 s/task** | |
+| `psf__requests-3362` | 1/3 | 24, 17, 16 | $0.057 | 123 s | submitted ×3 |
+| `pytest-dev__pytest-7432` | 2/3 | 6, 8, 8 | $0.020 | 52 s | submitted ×3 |
+| `pytest-dev__pytest-5227` | 3/3 | 4, 4, 12 | $0.006 | 24 s | submitted ×3 |
+| `pytest-dev__pytest-7220` | 1/3 | 25, 30, 23 | $0.105 | 121 s | submitted, max_turns, max_tokens |
+| `mwaskom__seaborn-3010` | 3/3 | 4, 9, 8 | $0.008 | 32 s | submitted ×3 |
+| **All** | **10/15 (67%)** | | **$0.039/task** | **70 s/task** | |
 
-Each batch scored 3/5. Runtime is the whole `solve`: sandbox start, the agent loop, diff capture and evaluation. Cost is computed from each turn's token usage with the price table in `src/agent/model.py`, so cache reads are priced as such (Gemini caches implicitly; 57-72% of input tokens in these batches were cache reads).
+The batches scored 4/5, 3/5 and 3/5, and no run was flagged by the isolation checks. Runtime is the whole `solve`: sandbox start, the agent loop, diff capture and evaluation. Cost is computed from each turn's token usage with the price table in `src/agent/model.py`, so cache reads are priced as such (Gemini caches implicitly; 59-68% of input tokens were cache reads).
 
-**For the Phase 5 budget:** at the dev-task mean, the other 295 Lite tasks would cost about $13 and take about 6.5 hours run one at a time. Treat that as a floor: the dev tasks were picked for small repos and short test runs, and cost per task varies 50-fold between them ($0.002 to $0.18), driven by how long the agent works and how much it reads.
+**For the Phase 5 budget:** at the dev-task mean, the other 295 Lite tasks would cost about $11.50 and take about 5.7 hours run one at a time. Treat that as a floor: the dev tasks were picked for small repos and short test runs, and cost per task varies about 70-fold between them ($0.002 to $0.15), driven by how long the agent works and how much it reads.
+
+### Before the task swap and the lower read cap
+
+The same model and prompt with the old task set and a 40,000-character `read` cap (batches `dev-g25-v3-1` to `-3`) scored 9/15 (60%) at $0.044 and 79 s per task: `psf__requests-3362` 2/3, `pallets__flask-4992` 0/3, `pytest-dev__pytest-5227` 3/3, `pytest-dev__pytest-7220` 1/3, `mwaskom__seaborn-3010` 3/3.
+
+On the four tasks in both sets the score went from 9/12 to 8/12, a single `psf__requests-3362` run, within the noise (that task has flipped before with nothing changed). The lower cap cut `pytest-dev__pytest-7220`'s mean tokens by about 7% (833k to 778k) and its mean cost by about 12%, but one of its runs still hit the token budget: its largest output was now an unfiltered `git grep -n "AssertionError"` over the repo (about 19,700 characters, just under the `bash` cap), followed by three capped reads. The cause is the history growing every turn, which lower caps only trim; managing what stays in context is Phase 3 and later work.
 
 ## How the prompt got here
 
@@ -44,7 +48,11 @@ Since three signals (the prompt's turn limit, a target of about half the budget,
 
 ## Failures under the current prompt
 
-- **`pallets__flask-4992` (0/3): not solvable from the issue.** The issue asks for a file mode parameter and suggests `mode="b"`; the agent adds `mode` every time. The hidden test calls `from_file(..., text=False)`, the name upstream chose. Expect this task to fail for any agent that follows the issue; consider swapping it for a task whose hidden test follows from its issue.
+Read from the `v3` batches, plus the one `pytest-dev__pytest-7432` failure from `v4`.
+
+- **`pytest-dev__pytest-7432` (1 failure in 3): a regression.** In `dev-g25-v4-2` the fix passes the hidden test but breaks the existing `test_xfail_run_anyway`: it moved the `--runxfail` "don't interfere" branch below the xfail handling, so with `--runxfail` that handling now interferes. The agent checked its fix with its own reproduction script and never ran `testing/test_skipping.py`, which the prompt asks for, so it never saw the break.
+
+- **`pallets__flask-4992` (0/3, since replaced): not solvable from the issue.** The issue asks for a file mode parameter and suggests `mode="b"`; the agent adds `mode` every time. The hidden test calls `from_file(..., text=False)`, the name upstream chose. Expect this task to fail for any agent that follows the issue; consider swapping it for a task whose hidden test follows from its issue.
 - **`pytest-dev__pytest-7220` (1/3): hard, and the fixes are wrong.** The agent reproduces the bug every time, then tries fixes in `code.py`, `nodes.py` or `terminal.py` that its reproduction shows do not work, and runs out of turns or tokens. In `dev-g25-v3-2` it read the 1,217-line `src/_pytest/_code/code.py` whole three times; each read hit the 40,000-character cap (about 10k tokens), and since every turn resends the history, the 1M-token budget ran out at turn 22.
 - **`psf__requests-3362` (1 failure in 3): a real but wrong fix.** Since fix 1 the agent changes behaviour in `iter_content` rather than docs, but one run iterated through 9 edits without finding the change in `stream_decode_response_unicode` and submitted at turn 30.
 
@@ -61,6 +69,6 @@ These are the model's reasoning, which Phase 2 does not tune.
 
 ## Open
 
-- The `read` cap is now 16,000 characters (was 40,000): long files filled the context and the token budget fast. Its effect is not measured yet.
+- The context grows every turn, and long runs (`pytest-dev__pytest-7220`) still hit the token budget after the `read` cap was lowered. Lower caps only trim the edges; what stays in context is a Phase 3+ question.
 - One run per task is noisy (`psf__requests-3362` went resolved, unresolved, resolved with no change in between). Compare changes on at least three batches.
 - A Claude comparison (`--model anthropic:claude-sonnet-5-5`), suggested in [PHASE2.md](PHASE2.md), needs an Anthropic key.
