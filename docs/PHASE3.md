@@ -149,6 +149,6 @@ The biggest risk is a comparison that measures the budget or the ranking rather 
 - How large should the context budget be? Phase 2's `read` cap is 16,000 characters. A budget of about 24,000 characters (about 6k tokens) gives `full_file` two or three files and `repo_map` a dozen or more; is one budget fair to both, or should each be tested at two sizes?
 - Should the ranking include test files? The hidden tests are not in the repo, but existing tests near the bug show how the code is used.
 - Should the system prompt tell the agent that context may be provided? Changing it breaks "everything else stays fixed"; the first message can label the section instead.
-- Does the growing history (Phase 2's token-budget failures) need handling before Phase 5, or is it a strategy of its own for a later phase?
+- ~~Does the growing history need handling before Phase 5?~~ Decided: it is a separate axis, history handling, run as an extra Phase 5 condition ([PLAN.md](PLAN.md)). Phase 3 keeps the loop append-only.
 
 **Next:** Phase 4 adds a graph traversal strategy behind the same protocol: build a code graph with `ast`, start from the ranked entry points, and follow calls and imports N hops to choose context.

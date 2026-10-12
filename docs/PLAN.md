@@ -120,8 +120,23 @@ Details, tasks and open questions in [PHASE3.md](PHASE3.md).
 - 15-20 tasks across all conditions: none, full-file, repo-map, graph traversal
 - Record pass rate, iterations to pass, tokens, latency, cost
 - Review failures by hand: why a strategy failed is the best interview material
+- One extra condition: history handling (below), on the best starting strategy only
 
 **Done when:** you have a comparison table you can explain.
+
+### History handling (an extra Phase 5 condition)
+
+Phases 3-4 choose what the agent starts with; this chooses what stays in the history as the run goes on. Phase 2 showed the need: every turn resends everything read so far, so a run's cost grows roughly with the square of its length, and `pytest-dev__pytest-7220` hit the 1M-token budget in two of six runs even after the `read` cap was lowered ([DEV_RUNS.md](DEV_RUNS.md)). It is mainly a cost and robustness lever: those runs also had wrong fixes, so its effect on the pass rate is unknown and has to be measured.
+
+- A `HistoryStrategy` that transforms the messages sent to the model before each call; the saved trajectory stays complete
+- `append`: today's behaviour, keep everything (the baseline)
+- `mask`: replace tool outputs older than the last N turns with a short placeholder (`[output of read src/x.py, 412 lines, removed]`), keeping every tool call and its result so providers still pair them; no extra model calls, so build it first
+- `summarize`: past a size threshold, have the model summarise older turns and replace them; costs an extra call each time
+- Compare against `append` on tokens, cost, runs hitting `max_tokens`, cache-read share, and pass rate
+
+It is kept out of Phases 3-4 because it changes the loop, which those comparisons hold fixed, and because it breaks the loop's append-only rule: rewriting history invalidates the provider's prompt cache (57-72% of input tokens were cache reads in Phase 2) and Claude's thinking blocks, so savings must be measured net of lost cache hits. Testing it on the best starting strategy only, rather than every combination, keeps the number of runs down.
+
+**Done when:** `mask` (and `summarize` if time allows) is compared with `append` on the Phase 5 tasks, with the cost and pass-rate difference explained.
 
 ## Phase 6: Polish (3-5 days)
 
