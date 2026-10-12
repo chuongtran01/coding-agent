@@ -13,6 +13,11 @@ from agent.graph import run_agent
 from agent.harness.dataset import Task
 from agent.harness.evaluate import evaluate
 from agent.harness.sandbox import Sandbox, SandboxError
+from agent.isolation import (
+    hidden_lines,
+    hidden_text_seen,
+    package_paths_outside_testbed,
+)
 from agent.model import make_model
 from agent.runs import RUNS_DIR, Run, new_run_id, save_run
 from agent.tools import Shell, Toolbox
@@ -33,13 +38,17 @@ def solve(
 
     The agent works in an offline sandbox and sees only `task.for_agent()`; the diff is
     captured there, then scored by `evaluate()` in a fresh container. Hitting a limit
-    still ends in a scored diff. `model` overrides `make_model(config)`, for tests.
+    still ends in a scored diff. The run records the isolation checks: hidden text
+    the model received, and reads of the task's package outside the repo.
+    `model` overrides `make_model(config)`, for tests.
     """
     run_id = run_id or new_run_id()
     started_at = datetime.now(timezone.utc)
     start = time.monotonic()
     chat_model = model or make_model(config)
     with Sandbox.start(task) as sandbox:
+        # Before the agent starts, while the repo is at its base commit.
+        hidden = hidden_lines(task, sandbox)
         toolbox = Toolbox(sandbox, bash_timeout_s=config.bash_timeout_s)
         result = run_agent(task.for_agent(), chat_model, toolbox, config)
         diff = capture_diff(sandbox)
@@ -61,6 +70,10 @@ def solve(
         runtime_s=time.monotonic() - start,
         messages=result.messages,
         tool_calls=result.tool_calls,
+        hidden_text_seen=hidden_text_seen(hidden, result.messages),
+        package_paths_outside_testbed=package_paths_outside_testbed(
+            task, result.tool_calls
+        ),
     )
     if runs_dir is not None:
         save_run(run, runs_dir)

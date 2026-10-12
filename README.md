@@ -7,7 +7,7 @@ An autonomous bug-fixing agent for Python repos, built with LangGraph and evalua
 | Phase | Name | Status |
 | --- | --- | --- |
 | 1 | Sandbox + test runner (no AI) | Done |
-| 2 | Bare agent loop | In progress |
+| 2 | Bare agent loop | Done |
 | 3 | Context strategy plugins | Not started |
 | 4 | Graph traversal strategy | Not started |
 | 5 | Eval harness + experiments | Not started |
@@ -96,6 +96,7 @@ src/agent/
   graph.py              the LangGraph loop: model and tools until submit or a limit
   solve.py              solve(task, config) -> Run: run, capture the diff, score, save
   runs.py               save and load runs under runs/
+  isolation.py          flag runs where the agent may have seen the answer
   cli.py                the `harness` command (solve, plus run and validate)
   harness/
     dataset.py          load SWE-bench Lite into Task models; the dev task list

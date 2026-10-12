@@ -70,7 +70,10 @@ def solved(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, AgentConfig, str]
         calls.append((t.instance_id, config, run_id))
         if t.instance_id == "boom":
             raise RuntimeError("docker went away")
-        return fake_run(t, config, run_id, resolved=t.instance_id != "b__b-2")
+        run = fake_run(t, config, run_id, resolved=t.instance_id != "b__b-2")
+        if t.instance_id == "leaky":
+            run.package_paths_outside_testbed = ["/opt/x/site-packages/leaky/a.py"]
+        return run
 
     monkeypatch.setattr(cli, "solve", fake_solve)
     monkeypatch.setattr(cli, "load_dev_tasks", lambda: DEV)
@@ -135,3 +138,14 @@ def test_harness_commands_still_work(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(harness_cli, "dispatch", fake_dispatch)
     assert cli.main(["validate"]) == 0
     assert seen == ["validate"]
+
+
+def test_flagged_runs_are_reported(
+    solved: list[tuple[str, AgentConfig, str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    cli.main(["solve", "leaky", "a__a-1"])
+    out = capsys.readouterr().out
+    assert "FLAGGED" in out and "1 flagged (scores not trusted)" in out
+    assert (
+        "touched its package outside /testbed: /opt/x/site-packages/leaky/a.py" in out
+    )

@@ -129,15 +129,15 @@ def solve(task: Task, config: AgentConfig) -> Run: ...
 
 ## Definition of done
 
-Phase 2 is done when every box below is ticked.
+Phase 2 is done when every box below is ticked. All are, as of 2026-10-11: results and findings in [DEV_RUNS.md](DEV_RUNS.md).
 
-- [ ] One command runs the agent on a task and prints the verdict, turns, tokens, cost and runtime.
-- [ ] The agent attempts all 5 dev tasks end to end, each ending in a scored diff (any pass rate).
-- [ ] Every run stops within its turn, token and wall-clock limits, and records why it stopped.
-- [ ] Nothing the model receives contains the gold patch, the test patch or the eval script, and its sandbox has no network.
-- [ ] Every run is saved: trajectory, diff, evaluation, tokens, cost.
-- [ ] Failed dev runs are reviewed by hand, with the findings written down.
-- [ ] Cost and runtime per task are recorded; they feed the Phase 5 budget.
+- [x] One command runs the agent on a task and prints the verdict, turns, tokens, cost and runtime.
+- [x] The agent attempts all 5 dev tasks end to end, each ending in a scored diff (any pass rate).
+- [x] Every run stops within its turn, token and wall-clock limits, and records why it stopped.
+- [x] Nothing the model receives contains the gold patch, the test patch or the eval script, and its sandbox has no network.
+- [x] Every run is saved: trajectory, diff, evaluation, tokens, cost.
+- [x] Failed dev runs are reviewed by hand, with the findings written down.
+- [x] Cost and runtime per task are recorded; they feed the Phase 5 budget.
 
 ## Risks and open questions
 

@@ -70,9 +70,12 @@ def _solve(tasks: list[Task], config: AgentConfig, run_id: str) -> int:
         print(_row(run), flush=True)
 
     resolved = sum(run.resolved for run in runs)
+    flagged = [run for run in runs if run.flagged]
     print(f"\n{resolved}/{len(tasks)} resolved", end="")
     if crashed:
         print(f", {len(crashed)} crashed", end="")
+    if flagged:
+        print(f", {len(flagged)} flagged (scores not trusted)", end="")
     if runs:
         cost = sum(run.cost_usd for run in runs)
         runtime = sum(run.runtime_s for run in runs)
@@ -82,6 +85,12 @@ def _solve(tasks: list[Task], config: AgentConfig, run_id: str) -> int:
             end="",
         )
     print(f"\nruns saved in {RUNS_DIR / run_id}")
+    for run in flagged:
+        print(f"\nFLAGGED {run.instance_id}:")
+        for line in run.hidden_text_seen:
+            print(f"  saw hidden text: {line}")
+        for path in run.package_paths_outside_testbed:
+            print(f"  touched its package outside /testbed: {path}")
     return 0 if resolved == len(tasks) else 1
 
 
@@ -93,6 +102,7 @@ def _row(run: Run) -> str:
         f"{run.instance_id:28} {verdict:13} {run.stop_reason:14}"
         f" {run.turns:3} turns {tokens:6.0f}k tok  ${run.cost_usd:.4f}"
         f"  {errors:2} tool errors  {run.runtime_s:4.0f}s"
+        + ("  FLAGGED" if run.flagged else "")
     )
 
 

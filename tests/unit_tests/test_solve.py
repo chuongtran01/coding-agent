@@ -145,11 +145,41 @@ def test_run_is_saved(evaluated: list[str], tmp_path: Path) -> None:
 
 
 def test_nothing_hidden_reaches_the_model(evaluated: list[str], tmp_path: Path) -> None:
-    model = ScriptedModel(replies=[ai(call("submit", "c1"))], seen=[])
-    solve(TASK, CONFIG, model=model, runs_dir=None)
-    sent = "\n".join(str(m.content) for m in model.seen[0])
-    for hidden in (TASK.gold_patch, TASK.test_patch, TASK.eval_script, "test_new"):
-        assert hidden not in sent
+    model = ScriptedModel(
+        replies=[
+            ai(call("bash", "c1", command="cat mod.py && git log -p")),
+            ai(call("bash", "c2", command="echo 'x = 2' > mod.py && git diff")),
+            ai(call("submit", "c3")),
+        ],
+        seen=[],
+    )
+    run = solve(TASK, CONFIG, model=model, runs_dir=None)
+    # Every request, not just the first: tool results come from the sandbox.
+    for request in model.seen:
+        sent = "\n".join(str(m.content) for m in request)
+        for hidden in (TASK.gold_patch, TASK.test_patch, TASK.eval_script, "test_new"):
+            assert hidden not in sent
+    assert not run.flagged
+
+
+def test_a_leak_through_the_sandbox_is_flagged(
+    evaluated: list[str], tmp_path: Path, repo: Path
+) -> None:
+    fix = "return decode_with_fallback(chunk, encoding, errors='replace')"
+    task = TASK.model_copy(
+        update={"gold_patch": f"diff --git a/mod.py b/mod.py\n+    {fix}\n"}
+    )
+    leak = repo / "leak.txt"  # not committed: stands in for a newer release on disk
+    leak.write_text(f"    {fix}\n")
+    model = ScriptedModel(
+        replies=[
+            ai(call("bash", "c1", command="cat leak.txt")),
+            ai(call("submit", "c2")),
+        ],
+        seen=[],
+    )
+    run = solve(task, CONFIG, model=model, runs_dir=None)
+    assert run.hidden_text_seen == [fix] and run.flagged
 
 
 def test_capture_diff_keeps_git_warnings_out(repo: Path) -> None:

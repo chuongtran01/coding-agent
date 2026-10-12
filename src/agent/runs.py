@@ -50,11 +50,19 @@ class Run(BaseModel):
     runtime_s: float  # the whole solve: sandbox start to the end of evaluation
     messages: list[AnyMessage]
     tool_calls: list[ToolCall]
+    # Isolation checks (see agent.isolation); a run with either is not trusted.
+    hidden_text_seen: list[str] = []
+    package_paths_outside_testbed: list[str] = []
 
     @property
     def resolved(self) -> bool:
         """Whether the hidden tests passed."""
         return self.evaluation.resolved
+
+    @property
+    def flagged(self) -> bool:
+        """Whether the agent may have seen the answer, so the score is not trusted."""
+        return bool(self.hidden_text_seen or self.package_paths_outside_testbed)
 
 
 def new_run_id() -> str:

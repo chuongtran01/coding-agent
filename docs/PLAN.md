@@ -14,7 +14,7 @@ A single-pass, autonomous bug-fixing agent (Python, LangGraph). It takes a SWE-b
 |---|---|---|
 | 0 | Research | Not started |
 | 1 | Sandbox + test runner (no AI) | Done |
-| 2 | Bare agent loop | **Next** |
+| 2 | Bare agent loop | Done |
 | 3 | Context strategy plugins | Not started |
 | 4 | Graph traversal strategy | Not started |
 | 5 | Eval harness + experiments | Not started |
