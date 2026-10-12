@@ -15,7 +15,7 @@ A single-pass, autonomous bug-fixing agent (Python, LangGraph). It takes a SWE-b
 | 0 | Research | Not started |
 | 1 | Sandbox + test runner (no AI) | Done |
 | 2 | Bare agent loop | Done |
-| 3 | Context strategy plugins | Not started |
+| 3 | Context strategy plugins | **Next** |
 | 4 | Graph traversal strategy | Not started |
 | 5 | Eval harness + experiments | Not started |
 | 6 | Polish | Not started |
@@ -98,6 +98,8 @@ For each, extract: exact tool signatures, how tool results are formatted back to
 **Done when:** the agent attempts a task end-to-end, even at a low pass rate.
 
 ## Phase 3: Context strategy plugins (1 week)
+
+Details, tasks and open questions in [PHASE3.md](PHASE3.md).
 
 - Define a `ContextStrategy` protocol so the agent loop is identical across conditions
 - Implement `none`, `full_file`, and `repo_map` (keyword/import-ranked skeleton)
