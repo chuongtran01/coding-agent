@@ -52,10 +52,11 @@ Context goes in the first user message, not the system prompt, so the system pro
 
 | Module | Responsibility |
 | --- | --- |
-| `__init__.py` | The `ContextStrategy` protocol, the `Context` and `ContextItem` types, and the registry (`get_strategy(name)`) |
+| `__init__.py` | Re-exports the package's public names |
+| `base.py` | The `ContextStrategy` protocol, and the `Context` and `ContextItem` types (apart from `__init__.py`, so `strategies.py` can import them without a cycle) |
 | `repo.py` | `RepoView`: read-only access to the repo through the sandbox (`git ls-files`, read a file, `git grep`) |
 | `rank.py` | The shared file ranking: terms from the issue, scored against paths, definitions and contents |
-| `strategies.py` | `none`, `full_file`, `repo_map` |
+| `strategies.py` | `none`, `full_file`, `repo_map`, the registry (`STRATEGIES`, `get_strategy(name)`), and `build_context`, which times a strategy |
 | `skeleton.py` | A file's skeleton for `repo_map`: imports, classes, functions and signatures, from Python's `ast` |
 
 Changes elsewhere: `first_message(task, context)` in `prompts.py`, `context` and `context_budget_chars` in `AgentConfig`, the context record and recall in `Run`, and `--context` in the CLI.

@@ -8,7 +8,7 @@ An autonomous bug-fixing agent for Python repos, built with LangGraph and evalua
 | --- | --- | --- |
 | 1 | Sandbox + test runner (no AI) | Done |
 | 2 | Bare agent loop | Done |
-| 3 | Context strategy plugins | Next |
+| 3 | Context strategy plugins | In progress |
 | 4 | Graph traversal strategy | Not started |
 | 5 | Eval harness + experiments | Not started |
 | 6 | Polish | Not started |
@@ -39,9 +39,12 @@ uv run harness solve psf__requests-3362                    # one task (or severa
 uv run harness solve --dev                                 # every dev task
 uv run harness solve --dev --model anthropic:claude-sonnet-5-5
 uv run harness solve --dev --max-turns 20 --run-id my-batch
+uv run harness solve --dev --context none,full_file,repo_map --repeat 3 --run-id cmp
 ```
 
 `solve` runs the agent on each task in a fresh offline sandbox, captures its diff, scores it with the harness and prints a line per task, then a total. It exits 0 if every task is resolved and 1 if not. These calls spend API credits.
+
+`--context` picks the context strategy, the code put in the first message before the agent starts (default `none`, the Phase 2 baseline). With several strategies or `--repeat N`, `solve` runs N rounds; in each, every task runs under every strategy in turn, and the strategy that goes first rotates between rounds. Each round and strategy is saved as its own batch, `<run_id>-<round>-<strategy>`, and the summary has a line per strategy.
 
 ```text
 pytest-dev__pytest-5227      RESOLVED      submitted       26 turns    362k tok  $0.1617   0 tool errors   136s

@@ -15,3 +15,5 @@ class AgentConfig(BaseModel):
     max_tokens: int = 1_000_000  # total over the run, input + output
     max_wall_clock_s: float = 1800
     bash_timeout_s: float = 120
+    context: str = "none"  # a context strategy, from agent.context.STRATEGIES
+    context_budget_chars: int = 24_000  # the most context text a strategy may add

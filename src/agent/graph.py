@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from agent.config import AgentConfig
+from agent.context import Context
 from agent.harness.dataset import AgentTask
 from agent.model import cost_usd
 from agent.prompts import initial_messages
@@ -232,12 +233,19 @@ def build_graph(
 
 
 def run_agent(
-    task: AgentTask, model: BaseChatModel, toolbox: Toolbox, config: AgentConfig
+    task: AgentTask,
+    model: BaseChatModel,
+    toolbox: Toolbox,
+    config: AgentConfig,
+    context: Context | None = None,
 ) -> AgentResult:
-    """Run the loop on `task` until it stops; never raises for model or tool errors."""
+    """Run the loop on `task` until it stops; never raises for model or tool errors.
+
+    `context` is a strategy's code for the first message; None adds nothing.
+    """
     started = time.monotonic()
     initial: State = {
-        "messages": initial_messages(task),
+        "messages": initial_messages(task, context),
         "tool_calls": [],
         "turns": 0,
         "input_tokens": 0,

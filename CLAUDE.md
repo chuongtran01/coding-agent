@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is in progress, with its spec and seven numbered tasks in `docs/PHASE2.md`. Phase 2 is done (tasks 1-7; results and findings in `docs/DEV_RUNS.md`); Phase 3 (context strategies at `first_message`) is next. Development runs on Gemini 2.5 Flash; read `docs/DEV_RUNS.md` before changing the prompt, and compare changes on at least three dev batches, since one run per task is noisy. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
+An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is done (spec in `docs/PHASE2.md`; results and findings in `docs/DEV_RUNS.md`); Phase 3, context strategies, is in progress, with its seven numbered tasks in `docs/PHASE3.md`. Development runs on Gemini 2.5 Flash; read `docs/DEV_RUNS.md` before changing the prompt, and compare changes on at least three dev batches, since one run per task is noisy. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
 
 ## Commands
 
@@ -19,6 +19,7 @@ uv run harness run pallets__flask-4992 --gold                  # evaluate a patc
 uv run harness validate                                         # gold/empty/broken on every dev task
 uv run harness solve psf__requests-3362                         # run the agent on a task (spends API credits)
 uv run harness solve --dev [--model anthropic:claude-sonnet-5-5] [--run-id NAME]
+uv run harness solve --dev --context none,full_file --repeat 3 --run-id cmp   # interleaved rounds
 ```
 
 The pre-commit hook runs `uv run make lint`, so a commit fails on any ruff or mypy error. mypy runs `--strict` over `tests/` too.
@@ -33,12 +34,13 @@ Two layers, with a one-way dependency: the agent (`src/agent/*.py`) imports the 
 
 **Isolation is the core invariant.** `Task` holds evaluation-only fields (`gold_patch`, `test_patch`, `eval_script`, FAIL_TO_PASS tests); `Task.for_agent()` returns an `AgentTask` with only id, repo, base commit and issue text. Anything that reaches the model must be built from `AgentTask`. The agent's sandbox runs with the network off; only `evaluate()` turns it on, in a separate container. The five `DEV_TASK_IDS` are for building and tuning, and are excluded from benchmark numbers.
 
-**Agent (Phase 2).** One run is: `Sandbox.start(task)` → `Toolbox(sandbox, ...)` → `run_agent(task.for_agent(), make_model(config), toolbox, config)` → `AgentResult`. `solve(task, config)` wraps this: it captures the diff in the same offline sandbox (`git add -A && git diff --cached HEAD`, with git's messages kept out of it), scores it with `evaluate()` in a fresh container, and saves a `Run` under `runs/<run_id>/<instance_id>/` (`run.json` summary, `patch.diff`, `trajectory.json`). `runs/` is git-ignored; a run id names one batch.
+**Agent (Phase 2).** One run is: `Sandbox.start(task)` → `build_context(strategy, task.for_agent(), RepoView(sandbox), budget)` → `Toolbox(sandbox, ...)` → `run_agent(task.for_agent(), make_model(config), toolbox, config, context)` → `AgentResult`. `solve(task, config)` wraps this: it captures the diff in the same offline sandbox (`git add -A && git diff --cached HEAD`, with git's messages kept out of it), scores it with `evaluate()` in a fresh container, and saves a `Run` under `runs/<run_id>/<instance_id>/` (`run.json` summary, `patch.diff`, `trajectory.json`). `runs/` is git-ignored; a run id names one batch.
 
 - `config.py`: `AgentConfig`, the model string (`"provider:model"`, passed to `init_chat_model`) and the limits.
 - `model.py`: every provider difference lives here; the rest of the agent sees a LangChain `BaseChatModel`. Claude's prompt caching is set through `model_kwargs`, because a `.bind(cache_control=...)` is dropped by the later `bind_tools()`. `make_model` refuses a model with no entry in `_PRICES`. `cost_usd` prices one turn, since price tiers depend on that turn's prompt size.
 - `tools.py`: `Toolbox.run(name, args)` returns a `ToolResult` and never raises; errors come back as `is_error=True` results the model can act on. Only `output` is sent to the model; the other fields are for the trajectory. A non-zero `bash` exit is a normal result (only a timeout is an error). `write`/`edit` copy through a temp file so existing files keep their mode and the diff shows no mode changes.
-- `prompts.py`: `SYSTEM_PROMPT` contains nothing task-specific so it caches across turns and tasks. `first_message(task)` is where Phase 3's context strategies will plug in.
+- `prompts.py`: `SYSTEM_PROMPT` contains nothing task-specific so it caches across turns and tasks. `first_message(task, context)` adds a strategy's code between the issue and the request; an empty context gives exactly the Phase 2 message (a test pins it).
+- `context/`: Phase 3's context strategies. `base.py` has `Context`, `ContextItem` and the `ContextStrategy` protocol; `strategies.py` the strategies and the `STRATEGIES` registry that `AgentConfig.context` and `--context` name; `repo.py` `RepoView`, read-only repo access for strategies. A strategy sees only the `AgentTask` and runs before the agent, with the repo at its base commit; `solve` resolves the name before any sandbox starts.
 - `isolation.py`: the two checks every `Run` records: hidden text (gold patch, test patch, eval script) the model received before writing it itself, and paths to the task's package outside `/testbed`. `hidden_lines` must run in the sandbox before the agent starts: it drops lines the issue, the repo or its history already contain, which were the false positives on real runs. `solve` marks a run with either as `FLAGGED`; its score is not trusted.
 - `graph.py`: a model node and a tool node, plus nudge and give-up nodes. Limits (turns, tokens, wall clock) are checked before each model call, so runs stop between turns with a `stop_reason`. A reply without tool calls is nudged once per stall. Every call in a reply gets a `ToolMessage`, including `invalid_tool_calls` (unanswered calls make the Anthropic API reject the next request).
 

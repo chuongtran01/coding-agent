@@ -1,7 +1,13 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from agent.context import Context
 from agent.harness.dataset import Task
-from agent.prompts import SYSTEM_PROMPT, first_message, initial_messages
+from agent.prompts import (
+    CONTEXT_NOTE,
+    SYSTEM_PROMPT,
+    first_message,
+    initial_messages,
+)
 
 TASK = Task(
     instance_id="psf__requests-0000",
@@ -24,6 +30,35 @@ def test_first_message_has_repo_and_issue() -> None:
     msg = first_message(TASK.for_agent())
     assert msg.startswith("Repository: psf/requests (checked out at /testbed)\n")
     assert "<issue>\n`Session.get` drops the `timeout` argument.\n</issue>" in msg
+
+
+PHASE2_FIRST_MESSAGE = (
+    "Repository: psf/requests (checked out at /testbed)\n\n"
+    "<issue>\n`Session.get` drops the `timeout` argument.\n</issue>\n\n"
+    "Resolve this issue."
+)
+
+
+def test_no_context_is_exactly_the_phase2_message() -> None:
+    # The `none` strategy reproduces the Phase 2 baseline byte for byte.
+    agent_task = TASK.for_agent()
+    assert first_message(agent_task) == PHASE2_FIRST_MESSAGE
+    empty = Context(strategy="none", text="")
+    assert first_message(agent_task, empty) == PHASE2_FIRST_MESSAGE
+
+
+def test_context_goes_between_the_issue_and_the_request() -> None:
+    context = Context(strategy="x", text="\nrequests/models.py\n1  import x\n")
+    msg = first_message(TASK.for_agent(), context)
+    assert msg == (
+        "Repository: psf/requests (checked out at /testbed)\n\n"
+        "<issue>\n`Session.get` drops the `timeout` argument.\n</issue>\n\n"
+        f"{CONTEXT_NOTE}\n\n"
+        "<context>\nrequests/models.py\n1  import x\n</context>\n\n"
+        "Resolve this issue."
+    )
+    _, user = initial_messages(TASK.for_agent(), context)
+    assert user.content == msg
 
 
 def test_system_prompt_is_the_same_for_every_task() -> None:

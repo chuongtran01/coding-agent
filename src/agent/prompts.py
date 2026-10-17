@@ -2,14 +2,15 @@
 
 The system prompt is the same for every task, so providers can cache it. Everything
 task-specific goes in the first user message, built from an `AgentTask` only: the
-agent never sees patches, tests or the eval script. Phase 3 adds context
-strategies at `first_message`, so the rest of the loop stays the same.
+agent never sees patches, tests or the eval script. A context strategy's code goes
+in the first message too, so the system prompt is the same for every strategy.
 """
 
 from __future__ import annotations
 
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 
+from agent.context import Context
 from agent.harness.dataset import AgentTask
 from agent.harness.sandbox import WORKDIR
 
@@ -52,15 +53,29 @@ check it. Act rather than describe what you plan to do, and call submit once the
 fix is in place and checked."""
 
 
-def first_message(task: AgentTask) -> str:
-    """Build the first user message: the repository and the issue text."""
+CONTEXT_NOTE = (
+    "The code below was selected automatically from the issue. It may be "
+    "incomplete, or include code unrelated to the fix."
+)
+
+
+def first_message(task: AgentTask, context: Context | None = None) -> str:
+    """Build the first user message: the repository, the issue and any context.
+
+    An empty context adds nothing, so the message is the Phase 2 one.
+    """
+    section = ""
+    if context is not None and context.text:
+        section = f"{CONTEXT_NOTE}\n\n<context>\n{context.text.strip()}\n</context>\n\n"
     return (
         f"Repository: {task.repo} (checked out at {WORKDIR})\n\n"
         f"<issue>\n{task.problem_statement.strip()}\n</issue>\n\n"
-        "Resolve this issue."
+        f"{section}Resolve this issue."
     )
 
 
-def initial_messages(task: AgentTask) -> list[AnyMessage]:
-    """Return the messages that start a run: the system prompt and the issue."""
-    return [SystemMessage(SYSTEM_PROMPT), HumanMessage(first_message(task))]
+def initial_messages(
+    task: AgentTask, context: Context | None = None
+) -> list[AnyMessage]:
+    """Return the messages that start a run: the system prompt, the issue, any context."""
+    return [SystemMessage(SYSTEM_PROMPT), HumanMessage(first_message(task, context))]

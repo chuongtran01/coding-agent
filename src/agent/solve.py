@@ -9,6 +9,7 @@ from pathlib import Path
 from langchain_core.language_models import BaseChatModel
 
 from agent.config import AgentConfig
+from agent.context import RepoView, build_context, get_strategy
 from agent.graph import run_agent
 from agent.harness.dataset import Task
 from agent.harness.evaluate import evaluate
@@ -38,19 +39,25 @@ def solve(
 
     The agent works in an offline sandbox and sees only `task.for_agent()`; the diff is
     captured there, then scored by `evaluate()` in a fresh container. Hitting a limit
-    still ends in a scored diff. The run records the isolation checks: hidden text
-    the model received, and reads of the task's package outside the repo.
-    `model` overrides `make_model(config)`, for tests.
+    still ends in a scored diff. The context strategy (`config.context`) chooses code
+    for the first message from the repo at its base commit. The run records the
+    isolation checks: hidden text the model received, and reads of the task's
+    package outside the repo. `model` overrides `make_model(config)`, for tests.
     """
     run_id = run_id or new_run_id()
     started_at = datetime.now(timezone.utc)
     start = time.monotonic()
+    strategy = get_strategy(config.context)  # an unknown name fails before Docker
     chat_model = model or make_model(config)
+    agent_task = task.for_agent()
     with Sandbox.start(task) as sandbox:
         # Before the agent starts, while the repo is at its base commit.
         hidden = hidden_lines(task, sandbox)
+        context = build_context(
+            strategy, agent_task, RepoView(sandbox), config.context_budget_chars
+        )
         toolbox = Toolbox(sandbox, bash_timeout_s=config.bash_timeout_s)
-        result = run_agent(task.for_agent(), chat_model, toolbox, config)
+        result = run_agent(agent_task, chat_model, toolbox, config, context)
         diff = capture_diff(sandbox)
     evaluation = evaluate(task, diff)
     run = Run(

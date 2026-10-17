@@ -7,7 +7,8 @@ from typing import Any
 import pytest
 
 from agent.config import AgentConfig
-from agent.harness.dataset import Task
+from agent.context import STRATEGIES, Context, RepoView, UnknownStrategyError
+from agent.harness.dataset import AgentTask, Task
 from agent.harness.evaluate import Evaluation
 from agent.harness.patch import ApplyResult
 from agent.harness.sandbox import SandboxError
@@ -195,3 +196,39 @@ def test_capture_diff_keeps_git_warnings_out(repo: Path) -> None:
 def test_capture_diff_fails_loudly(tmp_path: Path) -> None:
     with pytest.raises(SandboxError, match="failed to capture the diff"):
         capture_diff(LocalShell(tmp_path))  # not a git repo
+
+
+def test_an_unknown_context_fails_before_the_sandbox_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class NoSandbox:
+        @classmethod
+        def start(cls, task: Task) -> None:
+            raise AssertionError("the sandbox should not start")
+
+    monkeypatch.setattr("agent.solve.Sandbox", NoSandbox)
+    with pytest.raises(UnknownStrategyError):
+        solve(TASK, CONFIG.model_copy(update={"context": "nope"}), runs_dir=None)
+
+
+def test_the_strategys_context_is_in_the_first_message(
+    evaluated: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    received: list[tuple[object, object, int]] = []
+
+    class Fixed:
+        name = "fixed"
+
+        def build(self, task: AgentTask, repo: RepoView, budget_chars: int) -> Context:
+            received.append((task, repo, budget_chars))
+            return Context(strategy=self.name, text="CHOSEN_CODE")
+
+    monkeypatch.setitem(STRATEGIES, "fixed", Fixed())
+    model = ScriptedModel(replies=[ai(call("submit", "c1"))], seen=[])
+    config = CONFIG.model_copy(update={"context": "fixed", "context_budget_chars": 99})
+    run = solve(TASK, config, model=model, runs_dir=None)
+    ((task, repo, budget),) = received
+    # The strategy sees the agent's view of the task only, never the Task.
+    assert type(task) is AgentTask and isinstance(repo, RepoView) and budget == 99
+    assert "CHOSEN_CODE" in str(model.seen[0][1].content)
+    assert run.config.context == "fixed"
