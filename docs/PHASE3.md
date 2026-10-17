@@ -57,6 +57,7 @@ Context goes in the first user message, not the system prompt, so the system pro
 | `repo.py` | `RepoView`: read-only access to the repo through the sandbox (`git ls-files`, read a file, `git grep`) |
 | `rank.py` | The shared file ranking: terms from the issue, scored against paths, definitions and contents |
 | `strategies.py` | `none`, `full_file`, `repo_map`, the registry (`STRATEGIES`, `get_strategy(name)`), and `build_context`, which times a strategy |
+| `excerpt.py` | Numbered file text for `full_file`: a file whole, or its imports and the definitions that best match the issue, cut at `ast` boundaries |
 | `skeleton.py` | A file's skeleton for `repo_map`: imports, classes, functions and signatures, from Python's `ast` |
 
 Changes elsewhere: `first_message(task, context)` in `prompts.py`, `context` and `context_budget_chars` in `AgentConfig`, the context record and recall in `Run`, and `--context` in the CLI.
@@ -80,7 +81,7 @@ Seven tasks, in build order. Each ends with something you can run.
     - **Checkpoint before any agent run: ranking recall.** The share of files the gold patch changes that are in the top-k ranked files, computed from `Task.gold_patch` after ranking and never passed to a strategy or the agent. It needs only the task's sandbox, no API calls, so measure it on the 5 dev tasks and 25 tuning tasks (`harness rank --dev`, `harness rank --tuning`). The dev tasks have no django or sympy, which are 191 of Lite's 300, so the tuning tasks are drawn by repo with a fixed seed. Rules may change after seeing them, so they are excluded from Phase 5, like the dev tasks. If recall is low, improve the ranking before building the strategies: neither can do better than the files it is given. Results: [RANKING.md](RANKING.md).
 4. **`full_file`**
     - The top-ranked files, whole and with line numbers (as `read` shows them), until the budget is used.
-    - A file too big for the remaining budget is not skipped: the most relevant source files are often larger than the whole budget (`requests/models.py` is 861 lines, `src/_pytest/_code/code.py` 1,217). Show the functions and classes that match the issue's terms, each in full with line numbers, plus the file's imports; mark the item `trimmed`. Never cut a function in the middle.
+    - A file too big for the remaining budget is not skipped: the most relevant source files are often larger than the whole budget (`requests/models.py` is 861 lines, `src/_pytest/_code/code.py` 1,217). Show the functions and classes that match the issue's terms, each in full with line numbers, plus the file's imports; mark the item `trimmed`. Never cut a function in the middle. Built: a trimmed file takes at most half the room left, so files ranked below it still fit; on the 30 ranking tasks the context holds the gold file in 25 ([RANKING.md](RANKING.md)).
 5. **`repo_map`**
     - Skeletons of the top-ranked files: imports, class and function signatures with line numbers, the first line of each docstring. Far smaller per file, so it covers more files in the same budget.
     - Fall back to the file's `def` and `class` lines when `ast` cannot parse it (old Python 2 syntax).

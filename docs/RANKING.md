@@ -1,4 +1,4 @@
-# Ranking Recall (Phase 3, task 3)
+# Ranking Recall (Phase 3, tasks 3-4)
 
 As of 2026-10-16. The shared file ranking (`src/agent/context/rank.py`) measured before any strategy or agent run, as [PHASE3.md](PHASE3.md) task 3 requires. Reproduce with `uv run harness rank --dev` and `uv run harness rank --tuning`; no API calls.
 
@@ -65,3 +65,36 @@ Each round was run on both sets; rules stayed generic (no repo-specific rules).
 | 4 | A path seen only in a traceback scores as a frame, not also as a path named in the issue; names in an exception's message count fully; command-line options (`--fixtures`) as literals | 0.64 / 0.80 / 0.84 / 0.92 | unchanged |
 
 Stopped there: the remaining misses need call-following, and more rules would start to fit these 30 tasks.
+
+## What `full_file` shows (task 4)
+
+Measured the same way, before any agent run: `full_file` built on the same 30 tasks with the default 24,000-character budget. **Context recall** is the share of gold files that appear in the context at all, whole or trimmed.
+
+| | Value |
+| --- | --- |
+| Context recall | 0.83 (25 of 30) |
+| Context size | 21.5k-23.9k characters, never over the budget |
+| Files per context | 5.9 on average (whole or trimmed) |
+| Build time | 4.8 s on average, 16 s at most (emulated containers) |
+
+The five misses are the ranking's: their gold files rank 7, 7, 33, 46 and 67, and the budget runs out before then.
+
+**A gold file in the context is not always the fix in the context.** When the gold file is shown whole (10 tasks), the lines the gold patch changes are always there. When it is trimmed (15 tasks), they are there in 9. The other 6:
+
+| Task | Why the changed lines are left out |
+| --- | --- |
+| `django__django-15814` | The file ranks second and gets about 6k characters; the fixed function, `deferred_to_data`, scores highest but does not fit with the imports |
+| `matplotlib__matplotlib-23964` | The fix is in `draw_text`, the innermost traceback frame, outscored by the other frames' functions. Taking function names from traceback frames would fix it; that is a ranking change, left for later |
+| `pydata__xarray-5131` | The fix is in `__repr__`, and dunder names are not terms |
+| `sphinx-doc__sphinx-8595` | The fix is about `__all__`, likewise |
+| `pytest-dev__pytest-5221` | The issue names only the option `--fixtures`, which many functions use |
+| `scikit-learn__scikit-learn-13439` | The fix adds a new method, so there are no existing lines to show |
+
+**How the trimming rules got here.** Each round was checked against the 30 tasks.
+
+| Round | Change | Context recall | Trimmed gold files showing the fix |
+| --- | --- | --- | --- |
+| 1 | Fill whatever room is left with the best-matching definitions | 0.70 | not measured |
+| 2 | A trimmed file takes at most half the room left. Otherwise a large top file fills the budget with weak matches, and the files ranked 2 and 3 never appear | 0.87 | not measured |
+| 3 | A definition must use at least one full-weight term: `requests/utils.py` had been "in context" as `default_user_agent`, matched by the word "python" | 0.83 | 7 of 15 |
+| 4 | The class header is just the `class` line, without the docstring (`sympy`'s `Permutation` docstring is 328 lines). Terms a definition uses get diminishing returns, as in the ranking, so the function the issue names beats one that touches many terms. A named class's constructor gets the class's points. The floor dropped to 0.5 so that prose-only issues (`flask-4045`) still match | 0.83 | 9 of 15 |
