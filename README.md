@@ -8,7 +8,7 @@ An autonomous bug-fixing agent for Python repos, built with LangGraph and evalua
 | --- | --- | --- |
 | 1 | Sandbox + test runner (no AI) | Done |
 | 2 | Bare agent loop | Done |
-| 3 | Context strategy plugins | In progress |
+| 3 | Context strategy plugins | Done |
 | 4 | Graph traversal strategy | Not started |
 | 5 | Eval harness + experiments | Not started |
 | 6 | Polish | Not started |

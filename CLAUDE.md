@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is done (spec in `docs/PHASE2.md`; results and findings in `docs/DEV_RUNS.md`); Phase 3, context strategies, is in progress, with its seven numbered tasks in `docs/PHASE3.md`. Development runs on Gemini 2.5 Flash; read `docs/DEV_RUNS.md` before changing the prompt and `docs/RANKING.md` before changing the context ranking, and compare changes on at least three dev batches, since one run per task is noisy. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
+An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is done (spec in `docs/PHASE2.md`; results and findings in `docs/DEV_RUNS.md`); Phase 3, context strategies, is done (spec in `docs/PHASE3.md`; the comparison in `docs/CONTEXT_RUNS.md`). Development runs on Gemini 2.5 Flash; read `docs/DEV_RUNS.md` before changing the prompt and `docs/RANKING.md` before changing the context ranking, and compare changes on at least three dev batches, since one run per task is noisy. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
 
 ## Commands
 

@@ -128,11 +128,11 @@ Phase 3 is done when every box below is ticked.
 
 - [x] Swapping strategies is one config change (`--context none|full_file|repo_map`).
 - [x] `none` produces exactly the Phase 2 first message.
-- [ ] `full_file` and `repo_map` run on all 5 dev tasks, use the same ranking, and stay within the context budget.
+- [x] `full_file` and `repo_map` run on all 5 dev tasks, use the same ranking, and stay within the context budget.
 - [x] Every run records its context: what was chosen, why, and how big it is.
 - [x] Context recall is reported for every run, and nothing from the gold patch reaches the agent.
 - [x] Ranking recall is measured on the dev tasks and a sample of Lite tasks before any agent run ([RANKING.md](RANKING.md): recall@3 0.77, @10 0.90 over 30 tasks).
-- [ ] Three interleaved rounds on the dev tasks, with a comparison table and the worse-than-`none` runs reviewed by hand.
+- [x] Three interleaved rounds on the dev tasks, with a comparison table and the worse-than-`none` runs reviewed by hand ([CONTEXT_RUNS.md](CONTEXT_RUNS.md)).
 
 ## Risks and open questions
 
