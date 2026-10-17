@@ -2,8 +2,10 @@
 
 Each run directory holds:
 
-    run.json         the summary: config, stop reason, turns, tokens, cost, runtimes, evaluation
+    run.json         the summary: config, stop reason, turns, tokens, cost, runtimes,
+                     evaluation, and the context's files, reasons and size
     patch.diff       the diff the agent produced, exactly as it was scored
+    context.txt      the code the context strategy added to the first message, if any
     trajectory.json  every message and tool call, for reading failed runs by hand
 
 A run id names one batch (one invocation of `solve` over one or more tasks), so the
@@ -18,8 +20,10 @@ from pathlib import Path
 
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel
+from pydantic.main import IncEx
 
 from agent.config import AgentConfig
+from agent.context import Context
 from agent.graph import StopReason, ToolCall
 from agent.harness.evaluate import Evaluation
 
@@ -28,7 +32,15 @@ RUNS_DIR = Path("runs")
 _SUMMARY = "run.json"
 _DIFF = "patch.diff"
 _TRAJECTORY = "trajectory.json"
+_CONTEXT = "context.txt"
 _TRAJECTORY_FIELDS = {"messages", "tool_calls"}
+# Saved in files of their own: the diff, the trajectory, the context's text.
+_NOT_IN_SUMMARY: dict[str, IncEx | bool] = {
+    "diff": True,
+    "messages": True,
+    "tool_calls": True,
+    "context": {"text": True},
+}
 
 
 class Run(BaseModel):
@@ -50,6 +62,11 @@ class Run(BaseModel):
     runtime_s: float  # the whole solve: sandbox start to the end of evaluation
     messages: list[AnyMessage]
     tool_calls: list[ToolCall]
+    # What the context strategy chose; older runs, from before strategies, had none.
+    context: Context = Context(strategy="none", text="")
+    # Share of the gold patch's files in the context, computed after evaluation;
+    # None when the strategy shows no code by design ("none").
+    context_recall: float | None = None
     # Isolation checks (see agent.isolation); a run with either is not trusted.
     hidden_text_seen: list[str] = []
     package_paths_outside_testbed: list[str] = []
@@ -79,9 +96,11 @@ def save_run(run: Run, root: Path = RUNS_DIR) -> Path:
     """Write `run` to its directory and return the directory."""
     directory = run_dir(run.run_id, run.instance_id, root)
     directory.mkdir(parents=True, exist_ok=True)
-    summary = run.model_dump_json(exclude=_TRAJECTORY_FIELDS | {"diff"}, indent=2)
+    summary = run.model_dump_json(exclude=_NOT_IN_SUMMARY, indent=2)
     (directory / _SUMMARY).write_text(summary + "\n")
     (directory / _DIFF).write_text(run.diff)
+    if run.context.text:
+        (directory / _CONTEXT).write_text(run.context.text)
     trajectory = run.model_dump_json(include=_TRAJECTORY_FIELDS, indent=2)
     (directory / _TRAJECTORY).write_text(trajectory + "\n")
     return directory
@@ -93,4 +112,7 @@ def load_run(run_id: str, instance_id: str, root: Path = RUNS_DIR) -> Run:
     data = json.loads((directory / _SUMMARY).read_text())
     data |= json.loads((directory / _TRAJECTORY).read_text())
     data["diff"] = (directory / _DIFF).read_text()
+    context = directory / _CONTEXT
+    if "context" in data:
+        data["context"]["text"] = context.read_text() if context.exists() else ""
     return Run.model_validate(data)

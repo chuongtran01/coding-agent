@@ -9,7 +9,15 @@ from pathlib import Path
 from langchain_core.language_models import BaseChatModel
 
 from agent.config import AgentConfig
-from agent.context import RepoView, build_context, get_strategy
+from agent.context import (
+    Context,
+    NoContext,
+    RepoView,
+    build_context,
+    changed_files,
+    get_strategy,
+    recall,
+)
 from agent.graph import run_agent
 from agent.harness.dataset import Task
 from agent.harness.evaluate import evaluate
@@ -40,8 +48,9 @@ def solve(
     The agent works in an offline sandbox and sees only `task.for_agent()`; the diff is
     captured there, then scored by `evaluate()` in a fresh container. Hitting a limit
     still ends in a scored diff. The context strategy (`config.context`) chooses code
-    for the first message from the repo at its base commit. The run records the
-    isolation checks: hidden text the model received, and reads of the task's
+    for the first message from the repo at its base commit; the run records it, and
+    how many of the gold patch's files it showed. The run records the isolation
+    checks: hidden text the model received, and reads of the task's
     package outside the repo. `model` overrides `make_model(config)`, for tests.
     """
     run_id = run_id or new_run_id()
@@ -77,6 +86,8 @@ def solve(
         runtime_s=time.monotonic() - start,
         messages=result.messages,
         tool_calls=result.tool_calls,
+        context=context,
+        context_recall=context_recall(task, context),
         hidden_text_seen=hidden_text_seen(hidden, result.messages),
         package_paths_outside_testbed=package_paths_outside_testbed(
             task, result.tool_calls
@@ -85,6 +96,17 @@ def solve(
     if runs_dir is not None:
         save_run(run, runs_dir)
     return run
+
+
+def context_recall(task: Task, context: Context) -> float | None:
+    """Return the share of the gold patch's files that the context showed.
+
+    Computed after evaluation and stored on the run; it never reaches the agent.
+    None for `none`, which shows no code by design.
+    """
+    if context.strategy == NoContext.name:
+        return None
+    return recall((item.path for item in context.items), changed_files(task.gold_patch))
 
 
 def capture_diff(shell: Shell) -> str:

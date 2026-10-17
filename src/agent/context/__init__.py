@@ -12,6 +12,7 @@ from agent.context.recall import changed_files, recall
 from agent.context.repo import GrepMatch, RepoError, RepoView
 from agent.context.strategies import (
     STRATEGIES,
+    NoContext,
     UnknownStrategyError,
     build_context,
     get_strategy,
@@ -24,6 +25,7 @@ __all__ = [
     "ContextStrategy",
     "GrepMatch",
     "IssueTerms",
+    "NoContext",
     "RankedFile",
     "RepoError",
     "RepoView",

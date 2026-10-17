@@ -195,8 +195,12 @@ def _summary(runs: list[Run], *, attempted: int, crashed: int, label: str) -> st
         runtime = sum(run.runtime_s for run in runs)
         line += (
             f"  (cost ${cost:.4f}, ${cost / len(runs):.4f}/task;"
-            f" runtime {runtime:.0f}s, {runtime / len(runs):.0f}s/task)"
+            f" runtime {runtime:.0f}s, {runtime / len(runs):.0f}s/task"
         )
+        recalls = [r.context_recall for r in runs if r.context_recall is not None]
+        if recalls:
+            line += f"; context recall {sum(recalls) / len(recalls):.2f}"
+        line += ")"
     return line
 
 
@@ -267,6 +271,11 @@ def _row(run: Run, labelled: bool) -> str:
         f"{label}{run.instance_id:28} {verdict:13} {run.stop_reason:14}"
         f" {run.turns:3} turns {tokens:6.0f}k tok  ${run.cost_usd:.4f}"
         f"  {errors:2} tool errors  {run.runtime_s:4.0f}s"
+        + (
+            f"  context {run.context.chars / 1000:4.1f}k recall {run.context_recall:.2f}"
+            if run.context_recall is not None
+            else ""
+        )
         + ("  FLAGGED" if run.flagged else "")
     )
 

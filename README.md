@@ -52,7 +52,7 @@ uv run harness solve --dev --context none,full_file,repo_map --repeat 3 --run-id
 pytest-dev__pytest-5227      RESOLVED      submitted       26 turns    362k tok  $0.1617   0 tool errors   136s
 ```
 
-The model is a `provider:model` string; the default is `google_genai:gemini-2.5-flash`. A model needs an entry in the price table in `src/agent/model.py`, so every run records its cost. Each run is saved under `runs/<run_id>/<instance_id>/` (git-ignored): `run.json` with the config, stop reason, tokens, cost and evaluation, `patch.diff`, and `trajectory.json` with every message and tool call. A run stops when the agent calls `submit` or hits a limit (30 turns, a token budget, a wall-clock budget); either way its diff is scored.
+The model is a `provider:model` string; the default is `google_genai:gemini-2.5-flash`. A model needs an entry in the price table in `src/agent/model.py`, so every run records its cost. Each run is saved under `runs/<run_id>/<instance_id>/` (git-ignored): `run.json` with the config, stop reason, tokens, cost, evaluation, and the context's files, reasons, size and context recall (the share of the gold patch's files it showed, computed after evaluation); `patch.diff`; `trajectory.json` with every message and tool call; and `context.txt`, the code the strategy added to the first message. A run stops when the agent calls `submit` or hits a limit (30 turns, a token budget, a wall-clock budget); either way its diff is scored.
 
 ## Evaluate a patch
 

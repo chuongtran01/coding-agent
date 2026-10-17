@@ -232,3 +232,63 @@ def test_the_strategys_context_is_in_the_first_message(
     assert type(task) is AgentTask and isinstance(repo, RepoView) and budget == 99
     assert "CHOSEN_CODE" in str(model.seen[0][1].content)
     assert run.config.context == "fixed"
+
+
+GOLD_FIX = "x = compute_the_fixed_value(1)"
+FIXED_TASK = TASK.model_copy(
+    update={
+        "problem_statement": "`x` in mod.py is wrong.",
+        "gold_patch": (
+            "diff --git a/mod.py b/mod.py\n--- a/mod.py\n+++ b/mod.py\n"
+            f"@@ -1 +1 @@\n-x = 1\n+{GOLD_FIX}\n"
+        ),
+    }
+)
+
+
+def test_the_context_and_its_recall_are_saved(
+    evaluated: list[str], tmp_path: Path
+) -> None:
+    model = ScriptedModel(replies=[ai(call("submit", "c1"))], seen=[])
+    config = CONFIG.model_copy(update={"context": "full_file"})
+    runs = tmp_path / "runs"
+    run = solve(FIXED_TASK, config, run_id="r", model=model, runs_dir=runs)
+    (item,) = run.context.items
+    assert item.path == "mod.py" and not item.trimmed and item.reasons
+    assert run.context.text == "mod.py (1 lines)\n     1\tx = 1"
+    assert run.context.build_s > 0
+    assert run.context_recall == 1.0
+    # A strategy's context passes the isolation check: it is the repo's own code.
+    assert run.hidden_text_seen == [] and not run.flagged
+
+    directory = runs / "r" / TASK.instance_id
+    assert (directory / "context.txt").read_text() == run.context.text
+    summary = (directory / "run.json").read_text()
+    assert f'"chars": {len(run.context.text)}' in summary
+    assert "x = 1" not in summary  # the text is in context.txt only
+    assert load_run("r", TASK.instance_id, runs) == run
+
+
+def test_none_has_no_context_recall(evaluated: list[str], tmp_path: Path) -> None:
+    model = ScriptedModel(replies=[ai(call("submit", "c1"))], seen=[])
+    run = solve(FIXED_TASK, CONFIG, run_id="r", model=model, runs_dir=tmp_path)
+    assert run.context.strategy == "none" and run.context_recall is None
+    assert not (tmp_path / "r" / TASK.instance_id / "context.txt").exists()
+
+
+def test_hidden_text_in_a_context_is_flagged(
+    evaluated: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The isolation check covers the first message, context included.
+    class Leaky:
+        name = "leaky"
+
+        def build(self, task: AgentTask, repo: RepoView, budget_chars: int) -> Context:
+            return Context(strategy=self.name, text=GOLD_FIX)
+
+    monkeypatch.setitem(STRATEGIES, "leaky", Leaky())
+    model = ScriptedModel(replies=[ai(call("submit", "c1"))], seen=[])
+    config = CONFIG.model_copy(update={"context": "leaky"})
+    run = solve(FIXED_TASK, config, model=model, runs_dir=None)
+    assert run.hidden_text_seen == [GOLD_FIX] and run.flagged
+    assert run.context_recall == 0.0  # it showed no files

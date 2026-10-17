@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from agent.context.repo import RepoView
 from agent.harness.dataset import AgentTask
@@ -29,6 +29,12 @@ class Context(BaseModel):
     text: str  # the section added to the first message; "" adds nothing
     items: list[ContextItem] = []
     build_s: float = 0.0  # set by `build_context`, not by the strategy
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def chars(self) -> int:
+        """The size of `text`, kept in a run's summary, which leaves the text out."""
+        return len(self.text)
 
 
 class ContextStrategy(Protocol):

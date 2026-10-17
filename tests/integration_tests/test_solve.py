@@ -28,10 +28,14 @@ def test_solve_with_the_gold_patch_resolves(tmp_path: Path) -> None:
         ],
         seen=[],
     )
-    config = AgentConfig(model="anthropic:claude-sonnet-5-5")
+    config = AgentConfig(model="anthropic:claude-sonnet-5-5", context="full_file")
     run = solve(task, config, run_id="it", model=model, runs_dir=tmp_path)
 
     assert run.stop_reason == "submitted"
     assert run.evaluation.apply.applied, run.evaluation.apply.error
     assert run.resolved
+    # A real context is recorded and scored, and is not mistaken for a leak.
+    assert run.context.items and run.context.chars <= config.context_budget_chars
+    assert run.context_recall == 1.0  # the gold file, src/flask/config.py
+    assert not run.flagged, run.hidden_text_seen
     assert load_run("it", TASK_ID, tmp_path) == run

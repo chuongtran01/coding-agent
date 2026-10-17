@@ -72,6 +72,8 @@ def solved(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, AgentConfig, str]
         if t.instance_id == "boom":
             raise RuntimeError("docker went away")
         run = fake_run(t, config, run_id, resolved=t.instance_id != "b__b-2")
+        if config.context != "none":  # the context had a__a-1's gold file only
+            run.context_recall = 1.0 if t.instance_id == "a__a-1" else 0.0
         if t.instance_id == "leaky":
             run.package_paths_outside_testbed = ["/opt/x/site-packages/leaky/a.py"]
         return run
@@ -205,6 +207,10 @@ def test_rounds_interleave_strategies_and_rotate_the_first(
     out = capsys.readouterr().out
     for name in ("none", "full", "map"):  # b__b-2 is never resolved
         assert f"{name:10} 2/4 resolved" in out
+    summary = {line.split()[0]: line for line in out.splitlines()[-4:-1]}
+    assert "context recall" not in summary["none"]
+    assert summary["full"].endswith("; context recall 0.50)")
+    assert "context  0.0k recall 1.00" in out  # each run's row
     assert "runs saved in runs/cmp-*" in out
 
 

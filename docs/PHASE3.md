@@ -90,6 +90,7 @@ Seven tasks, in build order. Each ends with something you can run.
     - Save the `Context` on every `Run`: strategy, rendered text, items with scores and reasons, size, build time.
     - Context recall: the share of files the gold patch changes that appear in the context, the same measure as task 3's ranking recall but for what the strategy actually showed. Computed after evaluation, from `Task.gold_patch`; it is stored on the run and never reaches the agent.
     - The isolation checks already cover the first message; add a test that a strategy's context passes `hidden_text_seen`.
+    - Built: `run.json` holds the `Context` without its text (with `chars`), the text goes to `context.txt`, and `harness solve` prints each run's context size and recall and each strategy's mean recall. Tests show a real `full_file` context passes the check and that hidden text put in a context is flagged.
 7. **Run and compare**
     - Three rounds on the dev tasks with Gemini 2.5 Flash, all strategies interleaved: in each round every task runs under `none`, `full_file` and `repo_map`, and the strategy that goes first rotates from round to round. Running one strategy's batches after another's would turn drift over the hour (provider load, rate limits, warm images, credits running out) into apparent strategy effects. Each round and strategy gets its own run id (for example `cmp-1-full_file`). 45 runs, about $1.80 at Phase 2's cost.
     - A table per strategy: pass rate, turns, tokens, cost, runtime, context recall. Read every run where a strategy did worse than `none` and write down why. Five tasks are too few for conclusions: one run flipping moves a strategy's pass rate by about 7 points, so treat the table as a check that each strategy works and does not obviously hurt.
@@ -125,11 +126,11 @@ class ContextStrategy(Protocol):
 
 Phase 3 is done when every box below is ticked.
 
-- [ ] Swapping strategies is one config change (`--context none|full_file|repo_map`).
-- [ ] `none` produces exactly the Phase 2 first message.
+- [x] Swapping strategies is one config change (`--context none|full_file|repo_map`).
+- [x] `none` produces exactly the Phase 2 first message.
 - [ ] `full_file` and `repo_map` run on all 5 dev tasks, use the same ranking, and stay within the context budget.
-- [ ] Every run records its context: what was chosen, why, and how big it is.
-- [ ] Context recall is reported for every run, and nothing from the gold patch reaches the agent.
+- [x] Every run records its context: what was chosen, why, and how big it is.
+- [x] Context recall is reported for every run, and nothing from the gold patch reaches the agent.
 - [x] Ranking recall is measured on the dev tasks and a sample of Lite tasks before any agent run ([RANKING.md](RANKING.md): recall@3 0.77, @10 0.90 over 30 tasks).
 - [ ] Three interleaved rounds on the dev tasks, with a comparison table and the worse-than-`none` runs reviewed by hand.
 
