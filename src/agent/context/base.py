@@ -15,7 +15,8 @@ class ContextItem(BaseModel):
 
     path: str
     kind: Literal["file", "skeleton"]
-    trimmed: bool  # full_file: only the matching functions of a file too big to show
+    trimmed: bool  # only the parts that best match the issue: the file was too big
+    fallback: bool = False  # repo_map: def and class lines only; `ast` cannot parse it
     score: float
     reasons: list[str]  # e.g. "defines iter_content", "path in traceback"
     chars: int

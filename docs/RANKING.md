@@ -1,4 +1,4 @@
-# Ranking Recall (Phase 3, tasks 3-4)
+# Ranking Recall (Phase 3, tasks 3-5)
 
 As of 2026-10-16. The shared file ranking (`src/agent/context/rank.py`) measured before any strategy or agent run, as [PHASE3.md](PHASE3.md) task 3 requires. Reproduce with `uv run harness rank --dev` and `uv run harness rank --tuning`; no API calls.
 
@@ -98,3 +98,19 @@ The five misses are the ranking's: their gold files rank 7, 7, 33, 46 and 67, an
 | 2 | A trimmed file takes at most half the room left. Otherwise a large top file fills the budget with weak matches, and the files ranked 2 and 3 never appear | 0.87 | not measured |
 | 3 | A definition must use at least one full-weight term: `requests/utils.py` had been "in context" as `default_user_agent`, matched by the word "python" | 0.83 | 7 of 15 |
 | 4 | The class header is just the `class` line, without the docstring (`sympy`'s `Permutation` docstring is 328 lines). Terms a definition uses get diminishing returns, as in the ranking, so the function the issue names beats one that touches many terms. A named class's constructor gets the class's points. The floor dropped to 0.5 so that prose-only issues (`flask-4045`) still match | 0.83 | 9 of 15 |
+
+## What `repo_map` shows (task 5)
+
+Measured the same way: `repo_map` built on the same 30 tasks with the 24,000-character budget, next to `full_file`.
+
+| | `full_file` | `repo_map` |
+| --- | --- | --- |
+| Context recall | 0.83 (25 of 30) | **0.90** (27 of 30) |
+| Files per context | 5.9 | 9.4 |
+| Context size | 21.5k-23.9k | 23.5k-23.7k |
+| Gold hunks whose enclosing definition is shown | 22 of 29 | 27 of 31 |
+| Build time, mean | 4.8 s | 5.2 s |
+
+The three misses are the ranking's #33, #46 and #67, out of reach for any strategy that follows the ranking. No file needed the fallback for code `ast` cannot parse. Of the 27 gold files in the map, 7 are trimmed skeletons. Of the 4 hunks whose definition is not shown, two are in functions nested inside a method (`sphinx-7975`'s `keyfunc`), which skeletons leave out. "Shown" means only the signature, so this row measures something weaker for `repo_map` than for `full_file`, where the body is shown too.
+
+**One rule changed after measuring.** At first, only a skeleton too big for the room left was cut, as in `full_file`. That gave recall 0.87 with 7.8 files: big modules have big skeletons (`sympy/printing/latex.py`'s is 16.9k characters), so one took most of the budget. Capping every skeleton at half the room left gave 0.90 with 9.4 files, and `pytest-5221`'s gold file came back in.

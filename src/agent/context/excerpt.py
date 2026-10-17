@@ -35,20 +35,22 @@ GAP = "   ..."  # stands for lines left out of an excerpt
 
 _WORD = re.compile(r"\b[A-Za-z_]\w*\b")
 _IDENTIFIER = re.compile(r"^\w+$")
+_QUOTES = re.compile(r"""[rRuUbB]*("{3}|'{3}|"|')""")
 
 
 @dataclass(frozen=True)
-class _Unit:
-    """A definition an excerpt can show, with the lines it needs."""
+class Definition:
+    """A function, method, class header or named constant, scored against the issue."""
 
-    lines: frozenset[int]  # its own lines and, for a method, its class's header
+    lines: frozenset[int]  # all of it and, for a method, its class's header
+    outline: frozenset[int]  # its signature and first docstring line, for skeletons
     score: float
     first: int
 
 
 def whole(path: str, text: str) -> str:
     """Return the file with a header and line numbers, as `read` shows it."""
-    lines = _lines(text)
+    lines = split_lines(text)
     return f"{path} ({len(lines)} lines)\n{numbered(lines, range(1, len(lines) + 1))}"
 
 
@@ -62,19 +64,14 @@ def excerpt(path: str, text: str, terms: dict[str, float], budget: int) -> str |
         tree = ast.parse(text)
     except (SyntaxError, ValueError):  # Python 2 syntax, or a null byte
         return None
-    lines = _lines(text)
+    lines = split_lines(text)
     header = (
         f"{path} ({len(lines)} lines; showing its imports and the definitions "
         "that match the issue)\n"
     )
-    imports = {
-        n
-        for node in tree.body
-        if isinstance(node, ast.Import | ast.ImportFrom)
-        for n in _span(node)
-    }
+    imports = import_lines(tree)
     units = sorted(
-        (u for u in _units(tree, lines, terms) if u.score >= MIN_SCORE),
+        (u for u in definitions(tree, lines, terms) if u.score >= MIN_SCORE),
         key=lambda u: (-u.score, u.first),
     )
     room = budget - len(header)
@@ -89,12 +86,16 @@ def excerpt(path: str, text: str, terms: dict[str, float], budget: int) -> str |
     return header + numbered(lines, shown)
 
 
-def numbered(lines: list[str], shown: set[int] | range) -> str:
-    """Return the `shown` lines (1-based), numbered, with `GAP` where lines are left out."""
+def numbered(lines: list[str], shown: set[int] | range, *, gaps: bool = True) -> str:
+    """Return the `shown` lines (1-based), numbered, with `GAP` where lines are left out.
+
+    Without `gaps`, only the line numbers show what is left out, which keeps a
+    skeleton, mostly gaps, half the size.
+    """
     rows: list[str] = []
     previous = 0
     for n in sorted(shown):
-        if rows and n > previous + 1:
+        if gaps and rows and n > previous + 1:
             rows.append(GAP)
         line = lines[n - 1]
         if len(line) > MAX_LINE_CHARS:
@@ -106,32 +107,58 @@ def numbered(lines: list[str], shown: set[int] | range) -> str:
     return "\n".join(rows)
 
 
-def _lines(text: str) -> list[str]:
+def split_lines(text: str) -> list[str]:
+    """Split a file into lines as `ast` numbers them."""
     lines = [line.removesuffix("\r") for line in text.split("\n")]
     return lines[:-1] if lines and lines[-1] == "" else lines
 
 
-def _units(tree: ast.Module, lines: list[str], terms: dict[str, float]) -> list[_Unit]:
+def import_lines(tree: ast.Module) -> set[int]:
+    """Return the lines of the module's top-level imports."""
+    return {
+        n
+        for node in tree.body
+        if isinstance(node, ast.Import | ast.ImportFrom)
+        for n in _span(node)
+    }
+
+
+def definitions(
+    tree: ast.Module, lines: list[str], terms: dict[str, float]
+) -> list[Definition]:
+    """Return the module's functions, classes, methods and term-named constants.
+
+    Only top-level definitions and the methods of top-level classes: nested
+    functions are part of the function they are in.
+    """
     units = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            units.append(_unit(node.name, _span(node), lines, terms))
+            units.append(_unit(node, node.name, lines, terms))
         elif isinstance(node, ast.Assign | ast.AnnAssign):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for target in targets:
                 if isinstance(target, ast.Name) and target.id in terms:
-                    units.append(_unit(target.id, _span(node), lines, terms))
+                    units.append(_unit(node, target.id, lines, terms))
         elif isinstance(node, ast.ClassDef):
-            head = _class_header(node)
+            head = _header(node)
             named = NAME_MATCH * terms.get(node.name, 0.0)
-            units.append(_Unit(lines=head, score=named, first=min(head)))
+            units.append(
+                Definition(
+                    lines=head,
+                    outline=head | _docstring_line(node, lines),
+                    score=named,
+                    first=min(head),
+                )
+            )
             for item in node.body:
                 if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
-                    method = _unit(item.name, _span(item), lines, terms)
+                    method = _unit(item, item.name, lines, terms)
                     share = 1.0 if item.name in CONSTRUCTORS else CLASS_SHARE
                     units.append(
-                        _Unit(
+                        Definition(
                             lines=method.lines | head,
+                            outline=method.outline | head,
                             score=method.score + share * named,
                             first=method.first,
                         )
@@ -140,9 +167,10 @@ def _units(tree: ast.Module, lines: list[str], terms: dict[str, float]) -> list[
 
 
 def _unit(
-    name: str, span: frozenset[int], lines: list[str], terms: dict[str, float]
-) -> _Unit:
+    node: ast.stmt, name: str, lines: list[str], terms: dict[str, float]
+) -> Definition:
     """Score a definition: its name matching a term, and the terms it uses."""
+    span = _span(node)
     source = "\n".join(lines[n - 1] for n in sorted(span))
     words = set(_WORD.findall(source))
     used = sorted(
@@ -153,8 +181,13 @@ def _unit(
         ),
         reverse=True,
     )
-    return _Unit(
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        outline = _header(node) | _docstring_line(node, lines)
+    else:
+        outline = frozenset({node.lineno})
+    return Definition(
         lines=span,
+        outline=outline,
         score=NAME_MATCH * terms.get(name, 0.0)
         + sum(weight / i for i, weight in enumerate(used, 1)),
         first=min(span),
@@ -168,9 +201,28 @@ def _span(node: ast.stmt) -> frozenset[int]:
     return frozenset(range(first, (node.end_lineno or node.lineno) + 1))
 
 
-def _class_header(node: ast.ClassDef) -> frozenset[int]:
-    """Return a class's decorators and `class` line(s), up to its body."""
+def _header(
+    node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+) -> frozenset[int]:
+    """Return a definition's decorators and `class` or `def` lines, up to its body."""
     first = min([node.lineno, *(d.lineno for d in node.decorator_list)])
+    # A body that starts on the `def` line leaves the header that one line.
     end = max(node.body[0].lineno - 1, node.lineno)
-    # A class whose first statement shares the `class` line has no separate header.
     return frozenset(range(first, end + 1))
+
+
+def _docstring_line(
+    node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef, lines: list[str]
+) -> frozenset[int]:
+    """Return the line holding the first words of a docstring, if there is one."""
+    doc = node.body[0]
+    if not (
+        isinstance(doc, ast.Expr)
+        and isinstance(doc.value, ast.Constant)
+        and isinstance(doc.value.value, str)
+    ):
+        return frozenset()
+    for n in range(doc.lineno, (doc.end_lineno or doc.lineno) + 1):
+        if _QUOTES.sub("", lines[n - 1]).strip():
+            return frozenset({n})
+    return frozenset()

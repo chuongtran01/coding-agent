@@ -31,7 +31,7 @@ def test_registry_is_keyed_by_name() -> None:
 
 def test_unknown_strategy_lists_the_known_ones() -> None:
     with pytest.raises(
-        UnknownStrategyError, match="'nope'; choose from none, full_file"
+        UnknownStrategyError, match="'nope'; choose from none, full_file, repo_map"
     ):
         get_strategy("nope")
 

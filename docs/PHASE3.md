@@ -85,6 +85,7 @@ Seven tasks, in build order. Each ends with something you can run.
 5. **`repo_map`**
     - Skeletons of the top-ranked files: imports, class and function signatures with line numbers, the first line of each docstring. Far smaller per file, so it covers more files in the same budget.
     - Fall back to the file's `def` and `class` lines when `ast` cannot parse it (old Python 2 syntax).
+    - Built: every skeleton takes at most half the room left (big modules have skeletons of 17k characters), and a fallback is recorded as `ContextItem.fallback`. On the 30 ranking tasks the map holds the gold file in 27, against 25 for `full_file` ([RANKING.md](RANKING.md)).
 6. **Record and measure**
     - Save the `Context` on every `Run`: strategy, rendered text, items with scores and reasons, size, build time.
     - Context recall: the share of files the gold patch changes that appear in the context, the same measure as task 3's ranking recall but for what the strategy actually showed. Computed after evaluation, from `Task.gold_patch`; it is stored on the run and never reaches the agent.
@@ -100,6 +101,7 @@ class ContextItem(BaseModel):
     path: str
     kind: Literal["file", "skeleton"]
     trimmed: bool  # full_file: only the matching functions of a file too big to show whole
+    fallback: bool  # repo_map: def and class lines only, since `ast` cannot parse the file
     score: float
     reasons: list[str]  # e.g. "defines iter_content", "path in traceback"
     chars: int
