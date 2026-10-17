@@ -117,7 +117,7 @@ Details, tasks and open questions in [PHASE3.md](PHASE3.md).
 
 ## Phase 5: Eval harness + experiments (1 week)
 
-- 15-20 tasks across all conditions: none, full-file, repo-map, graph traversal
+- 15-20 tasks across all conditions: none, full-file, repo-map, graph traversal, drawn from the 270 Lite tasks that are neither dev tasks nor ranking tuning tasks ([DEV_TASKS.md](DEV_TASKS.md))
 - Record pass rate, iterations to pass, tokens, latency, cost
 - Review failures by hand: why a strategy failed is the best interview material
 - One extra condition: history handling (below), on the best starting strategy only

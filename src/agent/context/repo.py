@@ -57,17 +57,20 @@ class RepoView:
         regex: bool = False,
         word: bool = False,
         ignore_case: bool = False,
+        only_matching: bool = False,
         pathspec: str = "*.py",
     ) -> list[GrepMatch]:
         """Return the lines of tracked files that match any of `patterns`.
 
         Patterns are fixed strings unless `regex` (extended regex); `word` matches
-        whole words only. Binary files are skipped. No match is an empty list.
+        whole words only. With `only_matching`, each match's `text` is the matched
+        part alone, one per match, which keeps counting common words cheap. Binary
+        files are skipped. No match is an empty list.
         """
         if not patterns:
             return []
         flags = ["--null", "-n", "-I", "-E" if regex else "-F"]
-        flags += ["-w"] * word + ["-i"] * ignore_case
+        flags += ["-w"] * word + ["-i"] * ignore_case + ["-o"] * only_matching
         args = " ".join(f"-e {shlex.quote(p)}" for p in patterns)
         out = self._run(
             f"git grep {' '.join(flags)} {args} -- {shlex.quote(pathspec)}",

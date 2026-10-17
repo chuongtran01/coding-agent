@@ -25,7 +25,7 @@ Phase 3 covers context chosen once, before the first model turn. Anything that c
 | `none`, `full_file`, `repo_map` | Embeddings, vector search, an LLM choosing the context |
 | One shared file ranking, so `full_file` and `repo_map` differ only in how they render | Changing context mid-run: trimming history, summarising, re-retrieval |
 | Recording the selected context and its reasons on every run | Changes to the system prompt, tools or loop |
-| A context recall metric, computed after evaluation | The 295-task benchmark (Phase 5) |
+| A context recall metric, computed after evaluation | The benchmark on the remaining 270 tasks (Phase 5) |
 | Three dev batches per strategy | A model comparison |
 
 ## Architecture
@@ -77,7 +77,7 @@ Seven tasks, in build order. Each ends with something you can run.
     - Extract terms from the issue: file paths, dotted names, identifiers in backticks and code blocks, frame paths in tracebacks.
     - Score each tracked Python file: a path mentioned in the issue, a definition (`def`, `class`) of a term, mentions of terms in its contents. Prefer source files over tests, and cap how much any single term can add.
     - Return ranked files, each with the reasons for its score (for example `defines iter_content`, `path in traceback`). Deterministic: the same task always gives the same ranking.
-    - **Checkpoint before any agent run: ranking recall.** The share of files the gold patch changes that are in the top-k ranked files, computed from `Task.gold_patch` after ranking and never passed to a strategy or the agent. It needs only the task's sandbox, no API calls, so measure it on the 5 dev tasks and a sample of other Lite tasks (each needs its image, about 3 GB, so 20-30 tasks rather than all 300). If recall is low, improve the ranking before building the strategies: neither can do better than the files it is given.
+    - **Checkpoint before any agent run: ranking recall.** The share of files the gold patch changes that are in the top-k ranked files, computed from `Task.gold_patch` after ranking and never passed to a strategy or the agent. It needs only the task's sandbox, no API calls, so measure it on the 5 dev tasks and 25 tuning tasks (`harness rank --dev`, `harness rank --tuning`). The dev tasks have no django or sympy, which are 191 of Lite's 300, so the tuning tasks are drawn by repo with a fixed seed. Rules may change after seeing them, so they are excluded from Phase 5, like the dev tasks. If recall is low, improve the ranking before building the strategies: neither can do better than the files it is given. Results: [RANKING.md](RANKING.md).
 4. **`full_file`**
     - The top-ranked files, whole and with line numbers (as `read` shows them), until the budget is used.
     - A file too big for the remaining budget is not skipped: the most relevant source files are often larger than the whole budget (`requests/models.py` is 861 lines, `src/_pytest/_code/code.py` 1,217). Show the functions and classes that match the issue's terms, each in full with line numbers, plus the file's imports; mark the item `trimmed`. Never cut a function in the middle.
@@ -127,7 +127,7 @@ Phase 3 is done when every box below is ticked.
 - [ ] `full_file` and `repo_map` run on all 5 dev tasks, use the same ranking, and stay within the context budget.
 - [ ] Every run records its context: what was chosen, why, and how big it is.
 - [ ] Context recall is reported for every run, and nothing from the gold patch reaches the agent.
-- [ ] Ranking recall is measured on the dev tasks and a sample of Lite tasks before any agent run.
+- [x] Ranking recall is measured on the dev tasks and a sample of Lite tasks before any agent run ([RANKING.md](RANKING.md): recall@3 0.77, @10 0.90 over 30 tasks).
 - [ ] Three interleaved rounds on the dev tasks, with a comparison table and the worse-than-`none` runs reviewed by hand.
 
 ## Risks and open questions
@@ -143,7 +143,7 @@ The biggest risk is a comparison that measures the budget or the ranking rather 
 | Five tasks are too few to tell strategies apart | Three interleaved rounds; treat the dev table as a sanity check and leave conclusions to Phase 5 |
 | Drift over a long comparison (provider load, rate limits, credits) looks like a strategy effect | Interleave strategies within each round and rotate which goes first |
 | Old repos use Python 2 syntax that `ast` cannot parse | Fall back to `def` and `class` lines, and count the fallbacks |
-| Ranking on the dev tasks overfits to them | Keep ranking rules generic (no repo-specific rules); Phase 5 scores on the other 295 tasks |
+| Ranking on the dev tasks overfits to them | Keep ranking rules generic (no repo-specific rules); tune only on the dev and tuning tasks, which Phase 5 excludes |
 
 **Open questions**
 

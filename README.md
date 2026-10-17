@@ -46,6 +46,8 @@ uv run harness solve --dev --context none,full_file,repo_map --repeat 3 --run-id
 
 `--context` picks the context strategy, the code put in the first message before the agent starts (default `none`, the Phase 2 baseline). With several strategies or `--repeat N`, `solve` runs N rounds; in each, every task runs under every strategy in turn, and the strategy that goes first rotates between rounds. Each round and strategy is saved as its own batch, `<run_id>-<round>-<strategy>`, and the summary has a line per strategy.
 
+`uv run harness rank --dev` (or `--tuning`) shows the files the context ranking picks for each issue and where the gold patch's files rank, without calling a model; results are in [docs/RANKING.md](docs/RANKING.md).
+
 ```text
 pytest-dev__pytest-5227      RESOLVED      submitted       26 turns    362k tok  $0.1617   0 tool errors   136s
 ```

@@ -7,6 +7,8 @@ the same, so strategies can be compared on the same tasks.
 """
 
 from agent.context.base import Context, ContextItem, ContextStrategy
+from agent.context.rank import IssueTerms, RankedFile, issue_terms, rank_files
+from agent.context.recall import changed_files, recall
 from agent.context.repo import GrepMatch, RepoError, RepoView
 from agent.context.strategies import (
     STRATEGIES,
@@ -21,9 +23,15 @@ __all__ = [
     "ContextItem",
     "ContextStrategy",
     "GrepMatch",
+    "IssueTerms",
+    "RankedFile",
     "RepoError",
     "RepoView",
     "UnknownStrategyError",
     "build_context",
+    "changed_files",
     "get_strategy",
+    "issue_terms",
+    "rank_files",
+    "recall",
 ]

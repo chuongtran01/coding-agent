@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is done (spec in `docs/PHASE2.md`; results and findings in `docs/DEV_RUNS.md`); Phase 3, context strategies, is in progress, with its seven numbered tasks in `docs/PHASE3.md`. Development runs on Gemini 2.5 Flash; read `docs/DEV_RUNS.md` before changing the prompt, and compare changes on at least three dev batches, since one run per task is noisy. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
+An autonomous bug-fixing agent for Python repos, built on LangGraph and scored on SWE-bench Lite. It is built in phases (`docs/PLAN.md`): Phase 1, the evaluation harness, is done; Phase 2, the bare agent loop, is done (spec in `docs/PHASE2.md`; results and findings in `docs/DEV_RUNS.md`); Phase 3, context strategies, is in progress, with its seven numbered tasks in `docs/PHASE3.md`. Development runs on Gemini 2.5 Flash; read `docs/DEV_RUNS.md` before changing the prompt and `docs/RANKING.md` before changing the context ranking, and compare changes on at least three dev batches, since one run per task is noisy. Read the phase doc before starting a task: it fixes scope, proposed types and what is out of scope.
 
 ## Commands
 
@@ -18,6 +18,7 @@ uv run pytest tests/unit_tests/test_graph.py::test_max_turns   # one test
 uv run harness run pallets__flask-4992 --gold                  # evaluate a patch (--empty, --patch FILE|-)
 uv run harness validate                                         # gold/empty/broken on every dev task
 uv run harness solve psf__requests-3362                         # run the agent on a task (spends API credits)
+uv run harness rank --dev|--tuning [--top 10]                    # context ranking recall of the gold files; no API calls
 uv run harness solve --dev [--model anthropic:claude-sonnet-5-5] [--run-id NAME]
 uv run harness solve --dev --context none,full_file --repeat 3 --run-id cmp   # interleaved rounds
 ```
@@ -32,7 +33,7 @@ Two layers, with a one-way dependency: the agent (`src/agent/*.py`) imports the 
 
 **Harness (Phase 1).** `evaluate(task, diff)` starts a fresh container from the task's published SWE-bench image, applies the diff with `git apply`, runs the official SWE-bench eval script (which resets test files and applies the hidden `test_patch`), and grades the log with SWE-bench's own parser. `Sandbox` is one Docker container per attempt: `exec` and `write_file`, resource limits, removed on exit, repo at `/testbed` (`WORKDIR`).
 
-**Isolation is the core invariant.** `Task` holds evaluation-only fields (`gold_patch`, `test_patch`, `eval_script`, FAIL_TO_PASS tests); `Task.for_agent()` returns an `AgentTask` with only id, repo, base commit and issue text. Anything that reaches the model must be built from `AgentTask`. The agent's sandbox runs with the network off; only `evaluate()` turns it on, in a separate container. The five `DEV_TASK_IDS` are for building and tuning, and are excluded from benchmark numbers.
+**Isolation is the core invariant.** `Task` holds evaluation-only fields (`gold_patch`, `test_patch`, `eval_script`, FAIL_TO_PASS tests); `Task.for_agent()` returns an `AgentTask` with only id, repo, base commit and issue text. Anything that reaches the model must be built from `AgentTask`. The agent's sandbox runs with the network off; only `evaluate()` turns it on, in a separate container. The five `DEV_TASK_IDS` are for building and tuning, and are excluded from benchmark numbers, as are the 25 `TUNING_TASK_IDS` the context ranking is tuned on.
 
 **Agent (Phase 2).** One run is: `Sandbox.start(task)` → `build_context(strategy, task.for_agent(), RepoView(sandbox), budget)` → `Toolbox(sandbox, ...)` → `run_agent(task.for_agent(), make_model(config), toolbox, config, context)` → `AgentResult`. `solve(task, config)` wraps this: it captures the diff in the same offline sandbox (`git add -A && git diff --cached HEAD`, with git's messages kept out of it), scores it with `evaluate()` in a fresh container, and saves a `Run` under `runs/<run_id>/<instance_id>/` (`run.json` summary, `patch.diff`, `trajectory.json`). `runs/` is git-ignored; a run id names one batch.
 

@@ -229,3 +229,40 @@ def test_bad_context_or_repeat_fails_before_any_run(
     with pytest.raises(SystemExit):
         cli.main(argv)
     assert solved == []
+
+
+def test_rank_reports_where_the_gold_files_rank(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from collections.abc import Iterator
+    from contextlib import contextmanager
+
+    from agent.context import RankedFile
+
+    seen: list[object] = []
+
+    class FakeSandbox:
+        @classmethod
+        @contextmanager
+        def start(cls, t: Task) -> Iterator[None]:
+            yield None
+
+    def fake_rank(t: AgentTask, repo: RepoView) -> list[RankedFile]:
+        seen.append(t)
+        return [
+            RankedFile(path=p, score=s, reasons=["r"])
+            for p, s in (("x.py", 3.0), ("a.py", 2.0))
+        ]
+
+    gold = task("g__g-1").model_copy(
+        update={"gold_patch": "diff --git a/a.py b/a.py\ndiff --git a/b.py b/b.py\n"}
+    )
+    monkeypatch.setattr(cli, "Sandbox", FakeSandbox)
+    monkeypatch.setattr(cli, "rank_files", fake_rank)
+    monkeypatch.setattr(cli, "load_task", lambda _: gold)
+    assert cli.main(["rank", "g__g-1"]) == 0
+    assert [type(t) for t in seen] == [AgentTask]  # never the Task
+    out = capsys.readouterr().out
+    assert "gold: a.py (#2), b.py (not ranked)" in out
+    assert "  * 2   2.00  a.py  [r]" in out
+    assert "@1 0.00  @3 0.50  @5 0.50  @10 0.50" in out

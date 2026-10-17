@@ -4,6 +4,8 @@ As of 2026-10-09. The 3-5 SWE-bench Lite tasks used to build and validate the Ph
 
 All five come from the `test` split, because SWE-bench publishes per-instance images for it. Agent work will be tuned on them, so **exclude them from Phase 5 benchmark numbers** (score on the other 295).
 
+Phase 3 adds a second excluded set: the 25 ranking tuning tasks (`TUNING_TASK_IDS` in `src/agent/harness/dataset.py`), drawn by repo with a fixed seed to cover django and sympy, which these five lack. The context ranking's rules were adjusted after seeing them, so Phase 5 scores on the remaining 270 tasks. Only the ranking is tuned on them, never the agent.
+
 | Instance | FAIL_TO_PASS | PASS_TO_PASS | Why |
 | --- | --- | --- | --- |
 | `psf__requests-3362` | 1 | 75 | Pure Python, small dependency set; single target test |

@@ -4,12 +4,16 @@
     uv run harness solve --dev
     uv run harness solve --dev --model anthropic:claude-sonnet-5-5
     uv run harness solve --dev --context none,full_file,repo_map --repeat 3 --run-id cmp
+    uv run harness rank --dev
+    uv run harness rank --tuning --top 10
     uv run harness run pallets__flask-4992 --gold
     uv run harness validate
 
 `solve` runs the agent on each task, prints a line per task as it finishes and a
 summary at the end, and saves every run under `runs/<run_id>/`. It exits 0 if every
-run is resolved and 1 if not. `run` and `validate` come from the harness.
+run is resolved and 1 if not. `rank` ranks files from each issue, as the context
+strategies do, and reports how many of the gold patch's files rank in the top k;
+it makes no API calls. `run` and `validate` come from the harness.
 
 With several context strategies or `--repeat N`, `solve` runs N rounds, and in
 each round every task under every strategy, one task at a time, so drift over a
@@ -23,12 +27,22 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from typing import NamedTuple
 
 from agent.config import DEFAULT_MODEL, AgentConfig
-from agent.context import STRATEGIES, UnknownStrategyError, get_strategy
+from agent.context import (
+    STRATEGIES,
+    RepoView,
+    UnknownStrategyError,
+    changed_files,
+    get_strategy,
+    rank_files,
+    recall,
+)
 from agent.harness import cli as harness_cli
-from agent.harness.dataset import Task, load_dev_tasks, load_task
+from agent.harness.dataset import Task, load_dev_tasks, load_task, load_tuning_tasks
+from agent.harness.sandbox import Sandbox
 from agent.runs import RUNS_DIR, Run, new_run_id
 from agent.solve import solve
 
@@ -58,14 +72,32 @@ def main(argv: list[str] | None = None) -> int:
         "--repeat", type=_positive, default=1, help="rounds over every task"
     )
 
-    args = parser.parse_args(argv)
-    if args.command != "solve":
-        return harness_cli.dispatch(args)
-    if args.dev == bool(args.instance_ids):
-        parser.error("solve takes instance ids or --dev, not both")
-    selected = (
-        load_dev_tasks() if args.dev else [load_task(i) for i in args.instance_ids]
+    rank_cmd = sub.add_parser(
+        "rank", help="rank files from each issue and check the gold patch's files"
     )
+    rank_cmd.add_argument("instance_ids", nargs="*", metavar="instance_id")
+    rank_cmd.add_argument("--dev", action="store_true", help="every dev task")
+    rank_cmd.add_argument(
+        "--tuning", action="store_true", help="every ranking tuning task"
+    )
+    rank_cmd.add_argument(
+        "--top", type=_positive, default=5, help="ranked files to list per task"
+    )
+
+    args = parser.parse_args(argv)
+    if args.command not in ("solve", "rank"):
+        return harness_cli.dispatch(args)
+    tuning = getattr(args, "tuning", False)
+    if args.dev + tuning + bool(args.instance_ids) != 1:
+        parser.error(f"{args.command} takes one of: instance ids, --dev, --tuning")
+    if args.dev:
+        selected = load_dev_tasks()
+    elif tuning:
+        selected = load_tuning_tasks()
+    else:
+        selected = [load_task(i) for i in args.instance_ids]
+    if args.command == "rank":
+        return _rank(selected, args.top)
     config = AgentConfig(model=args.model, max_turns=args.max_turns)
     run_id = args.run_id or new_run_id()
     return _solve(plan(selected, args.context, args.repeat, run_id), config, run_id)
@@ -166,6 +198,45 @@ def _summary(runs: list[Run], *, attempted: int, crashed: int, label: str) -> st
             f" runtime {runtime:.0f}s, {runtime / len(runs):.0f}s/task)"
         )
     return line
+
+
+RECALL_AT = (1, 3, 5, 10)
+
+
+def _rank(tasks: list[Task], top: int) -> int:
+    recalls: dict[int, list[float]] = {k: [] for k in RECALL_AT}
+    for task in tasks:
+        # The gold patch only grades the ranking; rank_files never sees it.
+        gold = changed_files(task.gold_patch)
+        start = time.monotonic()
+        try:
+            with Sandbox.start(task) as sandbox:
+                ranked = rank_files(task.for_agent(), RepoView(sandbox))
+        except Exception as e:
+            print(f"{task.instance_id}  CRASHED  {type(e).__name__}: {e}", flush=True)
+            continue
+        paths = [f.path for f in ranked]
+        found = ", ".join(
+            f"{g} (#{paths.index(g) + 1})" if g in paths else f"{g} (not ranked)"
+            for g in gold
+        )
+        print(
+            f"{task.instance_id}  {len(paths)} files ranked"
+            f" in {time.monotonic() - start:.0f}s; gold: {found}"
+        )
+        for i, f in enumerate(ranked[:top], 1):
+            mark = "*" if f.path in gold else " "
+            print(f"  {mark}{i:2} {f.score:6.2f}  {f.path}  [{'; '.join(f.reasons)}]")
+        for k in RECALL_AT:
+            value = recall(paths[:k], gold)
+            if value is not None:
+                recalls[k].append(value)
+        print(flush=True)
+    n = len(recalls[RECALL_AT[0]])
+    if n:
+        line = "  ".join(f"@{k} {sum(v) / n:.2f}" for k, v in recalls.items())
+        print(f"ranking recall over {n} task(s):  {line}")
+    return 0
 
 
 def _context_names(value: str) -> list[str]:

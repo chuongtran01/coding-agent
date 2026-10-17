@@ -76,6 +76,10 @@ def test_grep_options(view: RepoView) -> None:
     ]
     assert [m.line for m in view.grep([r"^(class|def) "], regex=True)] == [1]
     assert view.grep(["RESPONSE"], ignore_case=True)[0].path == "pkg/models.py"
+    assert view.grep(["iter_", "content"], only_matching=True)[2:4] == [
+        GrepMatch(path="pkg/models.py", line=2, text="iter_"),
+        GrepMatch(path="pkg/models.py", line=2, text="content"),
+    ]
     assert [m.path for m in view.grep(["docs"], pathspec="*.md")] == ["README.md"]
 
 

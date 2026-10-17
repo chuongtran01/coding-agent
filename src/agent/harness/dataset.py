@@ -22,6 +22,38 @@ DEV_TASK_IDS: tuple[str, ...] = (
     "mwaskom__seaborn-3010",
 )
 
+# Tasks for tuning the context ranking (Phase 3), drawn by repo with a fixed seed so
+# that django and sympy, which the dev tasks lack, are covered. Ranking rules were
+# changed after seeing them, so like the dev tasks they are excluded from Phase 5
+# benchmark numbers. Only the ranking is tuned on them, never the agent.
+TUNING_TASK_IDS: tuple[str, ...] = (
+    "astropy__astropy-14182",
+    "django__django-13590",
+    "django__django-14382",
+    "django__django-14672",
+    "django__django-15347",
+    "django__django-15498",
+    "django__django-15814",
+    "matplotlib__matplotlib-23964",
+    "matplotlib__matplotlib-25332",
+    "mwaskom__seaborn-3190",
+    "pallets__flask-4045",
+    "psf__requests-1963",
+    "pydata__xarray-5131",
+    "pylint-dev__pylint-7228",
+    "pytest-dev__pytest-5221",
+    "pytest-dev__pytest-7168",
+    "scikit-learn__scikit-learn-10508",
+    "scikit-learn__scikit-learn-13439",
+    "sphinx-doc__sphinx-7975",
+    "sphinx-doc__sphinx-8595",
+    "sympy__sympy-11400",
+    "sympy__sympy-12481",
+    "sympy__sympy-18532",
+    "sympy__sympy-21171",
+    "sympy__sympy-24066",
+)
+
 
 class AgentTask(BaseModel):
     """The part of a task the agent may see: no patches, no tests, no eval script."""
@@ -95,3 +127,9 @@ def load_dev_tasks() -> list[Task]:
     """Load the dev tasks listed in `DEV_TASK_IDS`."""
     tasks = load_tasks()
     return [tasks[i] for i in DEV_TASK_IDS]
+
+
+def load_tuning_tasks() -> list[Task]:
+    """Load the ranking tuning tasks listed in `TUNING_TASK_IDS`."""
+    tasks = load_tasks()
+    return [tasks[i] for i in TUNING_TASK_IDS]
